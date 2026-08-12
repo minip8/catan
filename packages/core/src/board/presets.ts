@@ -251,6 +251,22 @@ export function scenarioForPlayers(players: number): Scenario {
   return generatedScenario(players);
 }
 
+/**
+ * Rebuild a scenario from its id.
+ *
+ * This is what makes a replay possible without shipping the board: a saved game stores
+ * `scenarioId`, and every scenario built here is a pure function of that string. A scenario that
+ * cannot be reconstructed from its id — one a player authored, say — has to travel with the
+ * replay instead, which is why `replay` takes an override.
+ */
+export function scenarioById(id: string): Scenario | undefined {
+  if (id === 'catan/base/3-4') return baseScenario34();
+  if (id === 'catan/base/5-6') return baseScenario56();
+  const generated = /^catan\/generated\/(\d+)$/.exec(id);
+  if (generated !== null) return generatedScenario(Number(generated[1]));
+  return undefined;
+}
+
 function repeat<T>(value: T, n: number): readonly T[] {
   return Array.from({ length: n }, () => value);
 }

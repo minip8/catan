@@ -12,7 +12,7 @@
   },
   "scripts": {
     "build": "tsc --build",
-    "typecheck": "tsc --build --force",
+    "typecheck": "tsc --build --force && tsc -p packages/core/tsconfig.test.json",
     "test": "vitest run",
     "test:watch": "vitest",
     "check": "biome check .",

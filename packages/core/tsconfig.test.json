@@ -1,0 +1,11 @@
+{
+  "//": "Typechecks test files too. The build tsconfig excludes them (they must not be emitted), which would otherwise leave all test code unchecked.",
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "noEmit": true,
+    "composite": false,
+    "declaration": false,
+    "declarationMap": false
+  },
+  "include": ["src/**/*.ts"]
+}

@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import { hexId, neighbors, parseHexId, spiral } from '../coords/axial.js';
-import type { HexId, TerrainId } from '../ids.js';
+import type { EdgeId, HexId, TerrainId, VertexId } from '../ids.js';
 import { seedRng } from '../rng.js';
 import {
   coastlineEdges,
@@ -236,9 +236,16 @@ describe('coastline and harbours', () => {
 
   it('walks a closed loop, each edge sharing a vertex with the next', () => {
     const { topology, coast } = coastOf(island34());
-    for (let i = 0; i < coast.length; i++) {
-      const a = topology.edgeVertices.get(coast[i] as never) ?? [];
-      const b = topology.edgeVertices.get(coast[(i + 1) % coast.length] as never) ?? [];
+    // Every coastal edge came out of the topology, so its endpoints must be present.
+    const endsOf = (e: EdgeId): readonly VertexId[] => {
+      const ends = topology.edgeVertices.get(e);
+      if (ends === undefined) throw new Error(`coastal edge ${e} has no endpoints`);
+      return ends;
+    };
+    for (const [i, edge] of coast.entries()) {
+      const next = coast[(i + 1) % coast.length] as EdgeId;
+      const a = endsOf(edge);
+      const b = endsOf(next);
       expect(a.some((v) => b.includes(v))).toBe(true);
     }
   });

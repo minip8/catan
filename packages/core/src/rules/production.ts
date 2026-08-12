@@ -76,8 +76,9 @@ export function planProduction(ctx: RuleContext, state: GameState, roll: number)
       for (const piece of piecesOn(state.board, vertex)) {
         const n = pieceKind(ctx.rules, piece.kind)?.production ?? 0;
         if (n <= 0 || piece.owner === null) continue;
-        const forPlayer = (claims[piece.owner] ??= {});
+        const forPlayer = claims[piece.owner] ?? {};
         forPlayer[kind] = (forPlayer[kind] ?? 0) + n;
+        claims[piece.owner] = forPlayer;
         const d = demand.get(kind) ?? { total: 0, players: new Set<PlayerId>() };
         d.total += n;
         d.players.add(piece.owner);
@@ -92,14 +93,16 @@ export function planProduction(ctx: RuleContext, state: GameState, roll: number)
   for (const [kind, { total, players }] of demand) {
     const available = state.bank[kind] ?? 0;
     if (total <= available) {
-      for (const p of players) (grants[p] ??= {})[kind] = claims[p]?.[kind] ?? 0;
+      for (const p of players) grants[p] = { ...grants[p], [kind]: claims[p]?.[kind] ?? 0 };
       continue;
     }
     shorted.push(kind);
     // Exactly one claimant: they take what is left. Several: nobody gets any of this kind.
     if (players.size === 1) {
       const [only] = [...players];
-      if (only !== undefined && available > 0) (grants[only] ??= {})[kind] = available;
+      if (only !== undefined && available > 0) {
+        grants[only] = { ...grants[only], [kind]: available };
+      }
     }
   }
 

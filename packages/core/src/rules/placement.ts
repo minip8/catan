@@ -175,6 +175,17 @@ export function canPlace(
   return checkConnection(ctx, state, player, meta, locus, connection);
 }
 
+/**
+ * The two vertices at the ends of an edge, widened from `LocusId`.
+ *
+ * The brands make `LocusId` deliberately un-indexable — that is their job — so the one place that
+ * legitimately asks "if this locus is an edge, what are its ends?" does the widening, rather than
+ * every caller casting.
+ */
+export function edgeEndsOf(ctx: RuleContext, locus: LocusId): readonly VertexId[] {
+  return ctx.topology.edgeVertices.get(locus as EdgeId) ?? [];
+}
+
 /** The hexes a locus touches: three for a vertex, two for an edge, itself for a hex. */
 export function hexesTouching(ctx: RuleContext, locus: LocusId): readonly HexId[] {
   switch (locusKindOf(ctx, locus)) {

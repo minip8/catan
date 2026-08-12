@@ -214,6 +214,26 @@ export class Tx {
     player.revealed = [...player.revealed, card];
   }
 
+  /**
+   * Move a card from a player's hand to its deck's discard pile — a played progress card.
+   *
+   * Distinct from `revealCard`, which leaves the card in front of its owner. The difference is
+   * load-bearing: Largest Army counts revealed knights, so a progress card that stayed revealed
+   * would be indistinguishable from one for any rule that reads the same pile.
+   */
+  discardCard(owner: PlayerId, card: CardId): void {
+    const player = this.player(owner);
+    const instance = this.state.cardInstances[card];
+    if (instance === undefined) throw new Error(`Tx.discardCard: unknown card ${card}`);
+    const hand = player.hands[instance.deck] ?? [];
+    if (!hand.includes(card)) {
+      throw new Error(`Tx.discardCard: ${owner} does not hold ${card}`);
+    }
+    player.hands[instance.deck] = hand.filter((c) => c !== card);
+    const deck = this.deck(instance.deck);
+    deck.discard = [...deck.discard, card];
+  }
+
   /** Reorder a deck's draw pile — the setup shuffle. */
   setDraw(deckId: DeckId, order: readonly CardId[]): void {
     this.deck(deckId).draw = order;

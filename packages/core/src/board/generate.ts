@@ -16,7 +16,7 @@
 
 import { type HexCoord, hexId, neighbors, parseHexId } from '../coords/axial.js';
 import { hexToPixel, makeLayout } from '../coords/layout.js';
-import type { EdgeId, HexId, TerrainId } from '../ids.js';
+import type { CardKind, EdgeId, HexId, TerrainId } from '../ids.js';
 import { type RngState, shuffle } from '../rng.js';
 import type { HarborSlot, HarborSpec } from './scenario.js';
 import type { Topology } from './topology.js';
@@ -393,6 +393,28 @@ export function terrainBagOfSize(total: number, deserts: number): readonly Terra
   });
   for (let k = 0; k < deserts; k++) bag.push('desert');
   return bag;
+}
+
+/**
+ * A harbour bag of `total` harbours in the official proportions.
+ *
+ * Both published boards split their harbours very nearly in half: 9 = 4 generic + 5 specific, and
+ * 11 = 5 generic + 6 specific. `floor`/`ceil` of a half reproduces both exactly, and specific
+ * harbours are dealt round-robin over `kinds` — which is also why the 11-harbour board has two
+ * wool harbours rather than an arbitrary duplicate.
+ */
+export function harborBagOfSize(total: number, kinds: readonly CardKind[]): readonly HarborSpec[] {
+  if (total < 0) throw new GenerationError(`harborBagOfSize: negative total ${total}`);
+  if (kinds.length === 0 && total > 0) {
+    throw new GenerationError('harborBagOfSize: no card kinds to make specific harbours from');
+  }
+  const specific = Math.ceil(total / 2);
+  const out: HarborSpec[] = [];
+  for (let i = 0; i < total - specific; i++) out.push({ ratio: 3, kind: null });
+  for (let i = 0; i < specific; i++) {
+    out.push({ ratio: 2, kind: kinds[i % kinds.length] as CardKind });
+  }
+  return out;
 }
 
 /** Land hexes as a compact, connected, roughly hexagonal region of `count` cells. */

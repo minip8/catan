@@ -32,6 +32,7 @@ import type { Result } from '../result.js';
 import type { Cost, GameState, Step } from '../state/gameState.js';
 import type { Tx } from '../state/tx.js';
 import type { Action, ActionSpec } from './action.js';
+import type { ConnectionRule } from './placement.js';
 import type { RuleViolation } from './violation.js';
 
 /** Everything a rule needs that is not `GameState`: the graph, the map, and the rules themselves. */
@@ -99,6 +100,13 @@ export interface PieceKindMeta {
    * image, `'water'`. `null` for pieces with no such requirement.
    */
   readonly needsAdjacent: 'land' | 'water' | null;
+  /**
+   * What the piece must connect to when it is built during normal play.
+   *
+   * The opening placements pass `'none'` explicitly instead, which is the whole of the difference
+   * between setup placement and ordinary building.
+   */
+  readonly connection: ConnectionRule;
   /** Built by replacing this kind, which returns to its owner's supply. City ← settlement. */
   readonly upgradesFrom?: PieceKind;
   /** False for neutral pieces (the robber), which belong to no player. */
@@ -127,8 +135,25 @@ export interface CardDefMeta {
     actor: PlayerId,
     action: Action,
   ) => Result<void, RuleViolation>;
-  /** Concrete play actions to offer a UI, given the current state. */
-  readonly options?: (ctx: RuleContext, state: GameState, actor: PlayerId) => readonly Action[];
+  /**
+   * Where the card goes once played: face up in front of its owner, or onto the discard pile.
+   *
+   * Knights stay face up because Largest Army is counted from them. Progress cards are discarded,
+   * which is also why a played Monopoly cannot be counted twice.
+   */
+  readonly onPlay: 'reveal' | 'discard';
+  /**
+   * The payload variants a UI should offer for this card — the two resources for Year of Plenty,
+   * the kind for Monopoly, a single empty payload for a knight.
+   *
+   * Variants rather than whole actions, because the caller is the one that knows *which copy* of
+   * the card is being played and splices in its `card` id.
+   */
+  readonly payloads?: (
+    ctx: RuleContext,
+    state: GameState,
+    actor: PlayerId,
+  ) => readonly Readonly<Record<string, unknown>>[];
 }
 
 export interface DeckSpec {

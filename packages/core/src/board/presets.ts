@@ -18,6 +18,7 @@
 import { type HexCoord, spiral } from '../coords/axial.js';
 import { BASE_RESOURCES, type CardKind, type TerrainId } from '../ids.js';
 import {
+  type Cell,
   type CellPlacement,
   type HarborSpec,
   type Scenario,
@@ -124,6 +125,17 @@ export const BASE_SETUP: readonly SetupRound[] = [
 
 // ── Scenarios ───────────────────────────────────────────────────────────────────────────────
 
+/**
+ * A terrain bag as scenario `stacks` entries.
+ *
+ * The bag lives in `stacks` rather than on the cells because the official setup deals terrain
+ * randomly: the cells fix *where* land is, the stack fixes *what is in the bag*, and `newGame`
+ * shuffles one onto the other.
+ */
+function terrainStack(bag: readonly TerrainId[]): readonly Cell[] {
+  return bag.map((terrain) => ({ kind: 'land', terrain }) as const);
+}
+
 function landCells(coords: readonly HexCoord[]): readonly CellPlacement[] {
   // Terrain is a placeholder here: the variable setup deals it from the bag at game start, and
   // `HexState` is what play reads. Scenario cells only fix *where* land is.
@@ -148,7 +160,7 @@ export function baseScenario34(): Scenario {
     // Slots are computed from the coastline at setup, since they depend on the built topology.
     harborSlots: [],
     harborBag: HARBOR_BAG_34,
-    stacks: {},
+    stacks: { main: terrainStack(TERRAIN_BAG_34) },
     numberBags: { main: NUMBER_BAG_34 },
     victoryTarget: 10,
     setup: BASE_SETUP,
@@ -165,7 +177,7 @@ export function baseScenario56(): Scenario {
     cells: withSeaRing(landCells(island56())),
     harborSlots: [],
     harborBag: HARBOR_BAG_56,
-    stacks: {},
+    stacks: { main: terrainStack(TERRAIN_BAG_56) },
     numberBags: { main: NUMBER_BAG_56 },
     victoryTarget: 10,
     setup: BASE_SETUP,

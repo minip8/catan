@@ -32,6 +32,7 @@ export * from './engine/autoplay.js';
 export * from './engine/newGame.js';
 export * from './engine/reduce.js';
 export * from './engine/replay.js';
+export * from './engine/session.js';
 export * from './engine/view.js';
 export * from './ext.js';
 // ── Identity and primitives ─────────────────────────────────────────────────────────────────

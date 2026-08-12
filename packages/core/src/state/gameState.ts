@@ -234,6 +234,16 @@ export interface GameState {
   /** **Hidden information.** `redactFor` must strip this, or clients can predict every roll. */
   rng: RngState;
 
+  /**
+   * Monotonic counter behind every `PieceId` and `CardId` the game mints.
+   *
+   * In the state rather than in the reducer because ids must be reproducible: a replay has to
+   * name the same road `pc37` as the original game did, or every event referring to it drifts.
+   * Never decremented — ids of destroyed pieces are not reused, so a stale client reference
+   * resolves to nothing rather than to a different piece.
+   */
+  seq: number;
+
   ext: Partial<GameExtensions>;
   outcome: Outcome | null;
 }

@@ -15,10 +15,15 @@
  *    pressure we want. Behaviour comes from the `RuleSet`'s metadata tables, not from a `switch`.
  */
 
-// `Widen` keeps a string-literal union open without using the banned `{}` type. Intersecting
-// with an empty record is a no-op for assignability but defeats literal-union narrowing, which
-// is what preserves editor autocomplete for the listed members.
-type Widen = string & Record<never, never>;
+/**
+ * Keeps a string-literal union open without using the banned `{}` type. Intersecting with an empty
+ * record is a no-op for assignability but defeats literal-union narrowing, which is what preserves
+ * editor autocomplete for the listed members.
+ *
+ * Exported because the same trick is wanted outside this file — `ViolationCode` is an open
+ * taxonomy for exactly the same reason the ones below are.
+ */
+export type Widen = string & Record<never, never>;
 
 declare const brand: unique symbol;
 

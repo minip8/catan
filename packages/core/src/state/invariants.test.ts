@@ -72,6 +72,7 @@ function validState(): GameState {
     scenarioId: baseScenario34().id,
     ruleSetId: 'test',
     seed: 1,
+    seq: 4,
     board: {
       hexes: Object.fromEntries(
         island34().map((h) => [

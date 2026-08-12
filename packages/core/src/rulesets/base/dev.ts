@@ -148,7 +148,9 @@ export const BASE_CARD_DEFS: Readonly<Record<CardDefId, CardDefMeta>> = {
     army: 0,
     onPlay: 'discard',
     play: (ctx, tx, actor) => roadBuildingPlay(ctx, tx, actor),
-    payloads: () => [{}],
+    // Offered only while there is a road left to place. `play` refuses otherwise, and a spec that
+    // offers what the reducer will refuse is a bug a bot finds before a player does.
+    payloads: (_ctx, state, actor) => ((state.players[actor]?.supply.road ?? 0) > 0 ? [{}] : []),
   },
   yearOfPlenty: {
     id: 'yearOfPlenty',

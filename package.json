@@ -1,0 +1,27 @@
+{
+  "name": "catan",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Catan — rules-faithful TypeScript implementation with a GUI and multiplayer",
+  "workspaces": [
+    "packages/*"
+  ],
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "build": "tsc --build",
+    "typecheck": "tsc --build --force",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "check": "biome check .",
+    "fix": "biome check --write ."
+  },
+  "devDependencies": {
+    "@biomejs/biome": "^2.2.0",
+    "fast-check": "^4.1.1",
+    "typescript": "^5.9.2",
+    "vitest": "^3.2.4"
+  }
+}

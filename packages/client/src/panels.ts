@@ -63,6 +63,24 @@ export interface Ui {
   readonly choice: readonly Placement[] | null;
   readonly lines: readonly Line[];
   readonly notice: string | null;
+  /**
+   * The viewpoints this table can offer.
+   *
+   * Every seat plus a spectator's for a hot-seat game; exactly one for a networked client, which
+   * holds the view the server sent it and cannot construct another. The seat switcher renders
+   * from this rather than from the player list, so a remote client cannot even offer to peek.
+   */
+  readonly viewpoints: readonly (PlayerId | null)[];
+  /** "Hot seat · seed 11", "Room 9jyb9g · live". */
+  readonly label: string;
+  /** False while a networked client is reconnecting. */
+  readonly ready: boolean;
+}
+
+/** A request for a fresh game: how many players, and whether it lives on a server. */
+export interface NewGameRequest {
+  readonly players: number;
+  readonly online: boolean;
 }
 
 export interface Handlers {
@@ -74,7 +92,7 @@ export interface Handlers {
   readonly submitDraft: () => void;
   readonly cancelDraft: () => void;
   readonly chooseNothing: () => void;
-  readonly newGame: (players: number) => void;
+  readonly newGame: (request: NewGameRequest) => void;
 }
 
 /** Player counts core will deal a board for. Above six there is no official layout. */
@@ -102,7 +120,7 @@ export function headerPanel(ui: Ui, on: Handlers): HTMLElement {
           text(
             'p',
             'title-sub',
-            `${ui.ctx.scenario.name} · first to ${ui.ctx.scenario.victoryTarget} points · seed ${ui.view.seed}`,
+            `${ui.ctx.scenario.name} · first to ${ui.ctx.scenario.victoryTarget} points · ${ui.label}`,
           ),
           // Core marks its 7-10 player layouts unofficial because no published rules cover them.
           ui.ctx.scenario.unofficial === true
@@ -115,20 +133,50 @@ export function headerPanel(ui: Ui, on: Handlers): HTMLElement {
         ],
       }),
       text('p', `status${ui.view.outcome !== null ? ' status-won' : ''}`, status),
-      h('div', {
-        attrs: { class: 'seats' },
-        children: [
-          text('span', 'seats-label', 'Watching'),
-          h('button', {
-            attrs: {
-              class: `chip${ui.watching.mode === 'auto' ? ' chip-on' : ''}`,
-              type: 'button',
-              title: 'Follow whoever the engine is waiting on',
-            },
-            on: { click: () => on.watch({ mode: 'auto' }) },
-            children: ['Hot seat'],
-          }),
-          ...ui.view.seatOrder.map((id) => seatButton(ui, on, id)),
+      h('div', { attrs: { class: 'seats' }, children: watchControls(ui, on) }),
+      h('div', { attrs: { class: 'seats' }, children: gameControls(ui, on) }),
+    ],
+  });
+}
+
+/**
+ * The seat switcher, or a badge saying which seat is yours.
+ *
+ * A table with one viewpoint has nothing to switch between, and offering the choice would suggest
+ * a networked client could look at someone else's hand. It cannot, so it does not ask.
+ */
+function watchControls(ui: Ui, on: Handlers): readonly HTMLElement[] {
+  const seats = ui.viewpoints.filter((seat): seat is PlayerId => seat !== null);
+
+  if (ui.viewpoints.length <= 1) {
+    const only = ui.viewpoints[0] ?? null;
+    const style = only === null ? null : seatStyle(ui.view.players[only]?.seat ?? 0);
+    return [
+      text('span', 'seats-label', 'You are'),
+      h('span', {
+        attrs: {
+          class: 'chip chip-seat chip-looking',
+          style: style === null ? null : `--seat: ${style.color}; --ink: ${style.ink}`,
+        },
+        children: [style?.name ?? 'a spectator'],
+      }),
+    ];
+  }
+
+  return [
+    text('span', 'seats-label', 'Watching'),
+    h('button', {
+      attrs: {
+        class: `chip${ui.watching.mode === 'auto' ? ' chip-on' : ''}`,
+        type: 'button',
+        title: 'Follow whoever the game is waiting on',
+      },
+      on: { click: () => on.watch({ mode: 'auto' }) },
+      children: ['Hot seat'],
+    }),
+    ...seats.map((id) => seatButton(ui, on, id)),
+    ...(ui.viewpoints.includes(null)
+      ? [
           h('button', {
             attrs: {
               class: `chip${ui.watching.mode === 'spectate' ? ' chip-on' : ''}`,
@@ -137,27 +185,40 @@ export function headerPanel(ui: Ui, on: Handlers): HTMLElement {
             on: { click: () => on.watch({ mode: 'spectate' }) },
             children: ['Spectator'],
           }),
-          h('select', {
-            attrs: { class: 'chip chip-select', 'aria-label': 'Players' },
-            on: {
-              change: (event) => on.newGame(Number((event.target as HTMLSelectElement).value)),
-            },
-            children: PLAYER_COUNTS.map((n) =>
-              h('option', {
-                attrs: { value: n, selected: n === ui.view.seatOrder.length },
-                children: [`${n} players`],
-              }),
-            ),
-          }),
-          h('button', {
-            attrs: { class: 'chip chip-new', type: 'button' },
-            on: { click: () => on.newGame(ui.view.seatOrder.length) },
-            children: ['New game'],
-          }),
-        ],
-      }),
-    ],
-  });
+        ]
+      : []),
+  ];
+}
+
+/** Start a fresh game, here or on the server. */
+function gameControls(ui: Ui, on: Handlers): readonly HTMLElement[] {
+  let players = ui.view.seatOrder.length;
+  return [
+    h('select', {
+      attrs: { class: 'chip chip-select', 'aria-label': 'Players' },
+      on: {
+        change: (event) => {
+          players = Number((event.target as HTMLSelectElement).value);
+        },
+      },
+      children: PLAYER_COUNTS.map((n) =>
+        h('option', {
+          attrs: { value: n, selected: n === players },
+          children: [`${n} players`],
+        }),
+      ),
+    }),
+    h('button', {
+      attrs: { class: 'chip chip-new', type: 'button' },
+      on: { click: () => on.newGame({ players, online: false }) },
+      children: ['New hot seat'],
+    }),
+    h('button', {
+      attrs: { class: 'chip chip-new', type: 'button', title: 'Create a room on the server' },
+      on: { click: () => on.newGame({ players, online: true }) },
+      children: ['New online game'],
+    }),
+  ];
 }
 
 function seatButton(ui: Ui, on: Handlers, id: PlayerId): HTMLElement {
@@ -278,6 +339,13 @@ export function bankPanel(ui: Ui): HTMLElement {
 // ── Actions ─────────────────────────────────────────────────────────────────────────────────
 
 export function actionsPanel(ui: Ui, on: Handlers): HTMLElement {
+  if (!ui.ready) {
+    // Offering moves that cannot be delivered would be a lie the reconnect then has to walk back.
+    return panel('Actions', [
+      text('p', 'notice', ui.notice ?? 'Reconnecting…'),
+      text('p', 'muted', 'The board below is the last thing the server told us.'),
+    ]);
+  }
   if (ui.view.outcome !== null) {
     return panel('Actions', [text('p', 'muted', 'The game is over.')]);
   }

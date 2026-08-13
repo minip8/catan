@@ -121,6 +121,22 @@ select {
   color: var(--accent);
 }
 
+/* Shown while connecting, and when connecting failed. */
+.splash {
+  max-width: 32rem;
+  margin: 6rem auto;
+  padding: 1.5rem;
+  background: var(--panel);
+  border: 1px solid var(--panel-edge);
+  border-radius: 0.6rem;
+  text-align: center;
+}
+
+.splash-message {
+  margin: 0.5rem 0;
+  font-size: 1.05rem;
+}
+
 /* ── Layout ─────────────────────────────────────────────────────────────────────────────── */
 
 .layout {

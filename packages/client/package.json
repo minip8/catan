@@ -13,6 +13,7 @@
     "@catan/core": "*"
   },
   "devDependencies": {
+    "@catan/server": "*",
     "@types/node": "^22.15.0",
     "vite": "^7.3.6"
   }

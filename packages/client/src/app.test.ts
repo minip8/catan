@@ -16,14 +16,17 @@
 import { describe, expect, it } from 'vitest';
 
 import { App } from './app.js';
+import { LocalTable } from './table.js';
 
-function mount(seed = 11, players = 4): { app: App; root: HTMLElement } {
+function mount(seed = 11, players = 4): { app: App; root: HTMLElement; table: LocalTable } {
   document.body.innerHTML = '<div id="app"></div>';
   const root = document.getElementById('app');
   if (root === null) throw new Error('mount: no root');
-  const app = new App(root, { seed, players });
+  const table = new LocalTable({ seed, players });
+  const app = new App(root, table, { newGame: () => {} });
+  table.onChange(() => app.render());
   app.render();
-  return { app, root };
+  return { app, root, table };
 }
 
 function click(el: Element | null | undefined): void {

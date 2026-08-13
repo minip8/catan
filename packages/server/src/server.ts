@@ -29,6 +29,7 @@ import { WebSocket, WebSocketServer } from 'ws';
 import { errorMessage, parseClientMessage, type ServerMessage } from './protocol.js';
 import type { Broadcast, Room } from './room.js';
 import { Rooms } from './rooms.js';
+import { serveStatic } from './static.js';
 import { MemoryStore, type RecordStore } from './store.js';
 import { ephemeralSecret, hmacTokens } from './tokens.js';
 
@@ -41,6 +42,13 @@ export interface ServerOptions {
   readonly secret?: string;
   readonly checkInvariants?: boolean;
   readonly log?: (message: string) => void;
+  /**
+   * Serve a built client from this directory.
+   *
+   * With it, the deployment is one process and the client talks to its own origin. Without it, the
+   * server is an API and something else hosts the files.
+   */
+  readonly staticDir?: string;
 }
 
 export interface RunningServer {
@@ -72,7 +80,7 @@ export async function startServer(options: ServerOptions = {}): Promise<RunningS
   const clients = new Set<Client>();
   const sockets = new WebSocketServer({ noServer: true });
   const http = createHttpServer((request, response) => {
-    void handleHttp(request, response, rooms).catch((cause: unknown) => {
+    void handleHttp(request, response, rooms, options.staticDir).catch((cause: unknown) => {
       log(`http: ${String(cause)}`);
       send(response, 500, { error: 'internal error' });
     });
@@ -215,6 +223,7 @@ async function handleHttp(
   request: IncomingMessage,
   response: ServerResponse,
   rooms: Rooms,
+  staticDir: string | undefined,
 ): Promise<void> {
   const url = new URL(request.url ?? '/', 'http://localhost');
   const path = url.pathname;
@@ -279,6 +288,11 @@ async function handleHttp(
     // the room exactly — which is what makes a desync report actionable.
     send(response, 200, room.record);
     return;
+  }
+
+  // The API is matched first, so a client bundle can never shadow a route the game needs.
+  if (request.method === 'GET' && staticDir !== undefined) {
+    if (await serveStatic(staticDir, path, response)) return;
   }
 
   send(response, 404, { error: 'no such route' });

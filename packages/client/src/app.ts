@@ -1,39 +1,26 @@
 /**
- * The application: one `Session`, one screen, one seat at a time.
+ * The application: one table, one screen, one seat at a time.
  *
- * This is a hot-seat client — everyone plays in the same tab — but it is deliberately built the
- * way a networked client would be. It holds a `Session` and never reaches past it: the board, the
- * scoreboard and the log are all rendered from `session.view(seat)`, the buttons come from
- * `session.options(seat)`, and every move goes through `session.act`, whose refusal is displayed
- * rather than pre-empted. Swapping the local session for a websocket is then a matter of replacing
- * three method calls, not of unpicking rules from the UI.
+ * The app does not know whether it is playing a game in this tab or a game on a server. It reads a
+ * `Snapshot` — a redacted view, the options that go with it, the log — and sends moves back through
+ * `Table.act`. Both implementations of that interface produce the same three things, because the
+ * engine's `Session` produces them per viewer and the server forwards them unchanged.
  *
- * Switching seats really does switch eyes. The hand, the log and even the scoreboard are rebuilt
- * from that seat's redacted view, so a development card you cannot see is a card this client does
- * not have — which makes the hot-seat game a live test of the redaction the server will depend on.
+ * What the app never does is decide anything about the rules. Every clickable thing on screen is an
+ * `Action` the engine offered, sent back unchanged; a refusal is displayed rather than pre-empted.
+ * That is what makes the same screen correct in both modes: there is no local rule to disagree with
+ * the server about.
  *
- * The seed is kept in the URL. A board is then a link, which is the cheapest possible use of the
- * engine's determinism: paste the fragment and you are looking at the same island.
+ * Dialog lifetime follows the offer rather than the click. A composer stays open while the engine
+ * is still offering that composition and closes when it stops — which is right whether it closed
+ * because you finished, or because someone else's move made it moot.
  */
 
-import {
-  type Action,
-  baseRules,
-  type Delivery,
-  type GameEvent,
-  type NewGame,
-  newGame,
-  type PlayerId,
-  type PlayerView,
-  type RuleContext,
-  redactEvents,
-  Session,
-  scenarioForPlayers,
-} from '@catan/core';
+import type { Action, PlayerId, PlayerView } from '@catan/core';
 
 import { boardSvg } from './board.js';
 import { h, render } from './dom.js';
-import { type Line, narrate } from './narrate.js';
+import { narrate } from './narrate.js';
 import {
   actionsPanel,
   bankPanel,
@@ -42,82 +29,85 @@ import {
   handPanel,
   headerPanel,
   logPanel,
+  type NewGameRequest,
   playersPanel,
   type Ui,
   type Watching,
 } from './panels.js';
 import { boardScene } from './scene.js';
+import type { Table } from './table.js';
 import { affordances, type Placement, visibleTargets } from './targets.js';
 
-export interface GameOptions {
-  readonly seed: number;
-  readonly players: number;
+export interface AppHandlers {
+  readonly newGame: (request: NewGameRequest) => void;
 }
 
 export class App {
   private readonly root: HTMLElement;
-  private options: GameOptions;
-  private game: NewGame;
-  private session: Session;
+  private readonly table: Table;
+  private readonly on: AppHandlers;
 
   private watching: Watching = { mode: 'auto' };
   private group: string | null = null;
   private draft: Draft | null = null;
   /** A locus offering more than one action — the robber's choice of victim. */
   private choice: readonly Placement[] | null = null;
-  private notice: string | null = null;
-  /** One entry per accepted action, holding every seat's delivery. The log is rebuilt from it. */
-  private batches: (readonly Delivery[])[] = [];
+  /** The last action count rendered, so a move that lands can close what it was aimed at. */
+  private at = -1;
 
-  constructor(root: HTMLElement, options: GameOptions) {
+  constructor(root: HTMLElement, table: Table, on: AppHandlers) {
     this.root = root;
-    this.options = options;
-    this.game = deal(options);
-    this.session = new Session(this.game, { checkInvariants: true });
+    this.table = table;
+    this.on = on;
 
     document.addEventListener('keydown', (event) => {
       if (event.key !== 'Escape') return;
       this.choice = null;
       this.draft = null;
       this.group = null;
-      this.notice = null;
+      this.table.dismiss();
       this.render();
     });
-  }
-
-  get ctx(): RuleContext {
-    return this.game.ctx;
   }
 
   // ── Rendering ─────────────────────────────────────────────────────────────────────────────
 
   render(): void {
-    const table = this.session.view(null);
-    const actors = actorsOf(table);
-    const seat = this.resolveSeat(actors);
-    const view = this.session.view(seat);
+    const seat = this.resolveSeat();
+    const snap = this.table.snapshot(seat);
+    const actors = actorsOf(snap.view);
+    const affs = affordances(this.table.ctx, snap.options);
 
-    const offered = seat === null ? [] : this.session.options(seat);
-    const affs = affordances(this.ctx, offered);
-    // A selected group is a UI preference, and the specs are regenerated from scratch after every
-    // action. Keep the selection only while the engine is still offering that group.
+    if (snap.at !== this.at) {
+      this.at = snap.at;
+      // A spot's menu is about a moment. Once the game has moved on, so has the moment.
+      this.choice = null;
+    }
+    // A selected group and an open composer are UI state about an *offer*. Keep them only while
+    // the engine is still making it.
     if (this.group !== null && !affs.groups.some((g) => g.key === this.group)) this.group = null;
+    if (this.draft !== null && !affs.groups.some((g) => g.key === this.draft?.group)) {
+      this.draft = null;
+    }
 
     const ui: Ui = {
-      ctx: this.ctx,
-      view,
-      seat,
+      ctx: this.table.ctx,
+      view: snap.view,
+      seat: snap.viewer,
       actors,
       affordances: affs,
       group: this.group,
       draft: this.draft,
       choice: this.choice,
-      lines: this.lines(seat, view),
-      notice: this.notice,
+      lines: snap.events.map((event) => narrate(snap.view, event)),
+      notice: this.table.notice,
       watching: this.watching,
+      viewpoints: this.table.viewpoints,
+      label: this.table.label,
+      ready: this.table.ready,
     };
     const on = this.handlers();
-    const scene = boardScene(this.ctx, view, visibleTargets(affs, this.group));
+    const scene = boardScene(this.table.ctx, snap.view, visibleTargets(affs, this.group));
 
     render(
       this.root,
@@ -165,7 +155,7 @@ export class App {
       },
       compose: (group) => {
         this.draft = draftFor(group);
-        this.notice = null;
+        this.table.dismiss();
         this.render();
       },
       editDraft: (draft) => {
@@ -177,14 +167,14 @@ export class App {
       },
       cancelDraft: () => {
         this.draft = null;
-        this.notice = null;
+        this.table.dismiss();
         this.render();
       },
       chooseNothing: () => {
         this.choice = null;
         this.render();
       },
-      newGame: (players) => this.restart(players),
+      newGame: (request) => this.on.newGame(request),
     };
   }
 
@@ -203,89 +193,50 @@ export class App {
   }
 
   /**
-   * Play an action, or show why not.
+   * Play an action.
    *
-   * The refusal path is not an afterthought. The client offers only what `legalActions` offered,
-   * so a violation here means the two disagreed — a bug worth seeing rather than swallowing —
-   * apart from the composed actions, where being told "you do not hold those cards" *is* the
-   * interface.
+   * `act` returns nothing: locally the table has already applied the move by the time it fires its
+   * change, and remotely the answer is a frame that has not arrived yet. Either way the screen is
+   * redrawn from whatever the table says next, which is the only version of the game that matters.
    */
   private send(action: Action): void {
-    const seat = this.resolveSeat(actorsOf(this.session.view(null)));
+    const seat = this.resolveSeat();
     if (seat === null) {
-      this.notice = 'Pick a seat before acting.';
       this.render();
       return;
     }
-
-    const result = this.session.act(seat, action);
-    if (!result.ok) {
-      this.notice = result.error.message;
-      this.render();
-      return;
-    }
-
-    this.batches.push(result.value);
-    this.notice = null;
-    this.choice = null;
-    this.draft = null;
+    this.table.act(seat, action);
     this.render();
   }
 
-  private restart(players: number): void {
-    const seed = Math.floor(Math.random() * 2 ** 31);
-    this.options = { seed, players };
-    window.location.hash = `seed=${seed}&players=${players}`;
-    this.game = deal(this.options);
-    this.session = new Session(this.game, { checkInvariants: true });
-    this.batches = [];
-    this.watching = { mode: 'auto' };
-    this.group = null;
-    this.draft = null;
-    this.choice = null;
-    this.notice = null;
-    this.render();
-  }
+  // ── Seat ──────────────────────────────────────────────────────────────────────────────────
 
-  // ── Seat and log ──────────────────────────────────────────────────────────────────────────
+  /**
+   * Whose eyes to use.
+   *
+   * Constrained to what the table can actually show. A remote client has one viewpoint — its own
+   * seat — so every mode collapses onto it, and the seat switcher in the header disappears.
+   */
+  private resolveSeat(): PlayerId | null {
+    const viewpoints = this.table.viewpoints;
+    const fallback = viewpoints[0] ?? null;
+    const offers = (seat: PlayerId | null): boolean => viewpoints.includes(seat);
 
-  private resolveSeat(actors: readonly PlayerId[]): PlayerId | null {
     switch (this.watching.mode) {
       case 'seat':
-        return this.watching.seat;
+        return offers(this.watching.seat) ? this.watching.seat : fallback;
       case 'spectate':
-        return null;
-      default:
-        // Hot seat: hand the screen to whoever the engine is waiting on. With a discard step that
-        // is a list, so the first player who owes cards goes first and the rest follow as each
+        return offers(null) ? null : fallback;
+      default: {
+        if (viewpoints.length <= 1) return fallback;
+        // Hot seat: hand the screen to whoever the game is waiting on. With a discard step that is
+        // a list, so the first player who owes cards goes first and the rest follow as each
         // finishes — the step shrinks its own actor list.
-        return actors[0] ?? null;
+        const actors = actorsOf(this.table.snapshot(fallback).view);
+        return actors.find(offers) ?? fallback;
+      }
     }
   }
-
-  /** The log as this seat saw it: the opening deal, then one delivery per accepted action. */
-  private lines(seat: PlayerId | null, view: PlayerView): readonly Line[] {
-    const out: Line[] = [];
-    for (const event of redactEvents(this.game.events, seat)) out.push(narrate(view, event));
-    for (const batch of this.batches) {
-      const delivery = batch.find((d) => d.viewer === seat);
-      for (const event of delivery?.events ?? emptyEvents) out.push(narrate(view, event));
-    }
-    return out;
-  }
-}
-
-const emptyEvents: readonly GameEvent[] = [];
-
-// ── Game setup ──────────────────────────────────────────────────────────────────────────────
-
-function deal(options: GameOptions): NewGame {
-  return newGame({
-    scenario: scenarioForPlayers(options.players),
-    rules: baseRules(),
-    seed: options.seed,
-    players: options.players,
-  });
 }
 
 function actorsOf(view: PlayerView): readonly PlayerId[] {

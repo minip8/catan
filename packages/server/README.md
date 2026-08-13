@@ -3,7 +3,7 @@
 Rooms, websockets, and the action log on disk. One runtime dependency: `ws`.
 
 ```
-npm run serve                                   # from the repo root, on :3000
+npm run build && npm run serve                  # from the repo root: the UI and the API on :3000
 DATA_DIR=./games SECRET=$(openssl rand -hex 32) npm run serve
 ```
 
@@ -13,7 +13,13 @@ GET  /rooms                              → live rooms, and every room on disk
 GET  /rooms/:id/record                   → the whole game, as decisions
 GET  /health
 ws://…/ws?room=ID                        → play
+GET  /*                                  → the built client, if there is one
 ```
+
+The last route is why the deployment is one process. `STATIC_DIR` points at a built client, and
+defaults to `packages/client/dist` when that exists, so the browser talks to its own origin and
+there is no CORS story to get wrong. The API is matched first: a bundle cannot shadow a route the
+game needs.
 
 ## What is stored
 
@@ -64,6 +70,7 @@ A socket that has not joined is sent nothing at all, not even the public view.
 | `store.ts` | `RecordStore`, in memory or one atomic JSON file per room |
 | `tokens.ts` | derived seat credentials, compared in constant time |
 | `server.ts` | HTTP and websockets — the only file that knows a socket exists |
+| `static.ts` | the built client, served from one directory and never from outside it |
 
 The split is the same one that makes the engine testable: every decision worth arguing about lives
 in `room.ts`, which is a function from tokens and actions to messages, and the transport is a shell

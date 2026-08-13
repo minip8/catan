@@ -156,7 +156,7 @@ function watchControls(ui: Ui, on: Handlers): readonly HTMLElement[] {
       h('span', {
         attrs: {
           class: 'chip chip-seat chip-looking',
-          style: style === null ? null : `--seat: ${style.color}; --ink: ${style.ink}`,
+          style: style === null ? null : `--seat: ${style.color}; --ink-color: ${style.ink}`,
         },
         children: [style?.name ?? 'a spectator'],
       }),
@@ -231,7 +231,9 @@ function seatButton(ui: Ui, on: Handlers, id: PlayerId): HTMLElement {
         ui.actors.includes(id) ? ' chip-active' : ''
       }`,
       type: 'button',
-      style: `--seat: ${seat.color}; --ink: ${seat.ink}`,
+      // `--ink-color`, not `--ink`: the latter is the global body ink, and setting it here would
+      // shadow it for everything inside the chip.
+      style: `--seat: ${seat.color}; --ink-color: ${seat.ink}`,
     },
     on: { click: () => on.watch({ mode: 'seat', seat: id }) },
     children: [seat.name],
@@ -263,7 +265,7 @@ function playerRow(ui: Ui, id: PlayerId): HTMLElement {
   return h('li', {
     attrs: {
       class: `player${ui.actors.includes(id) ? ' player-active' : ''}`,
-      style: `--seat: ${seat.color}; --ink: ${seat.ink}`,
+      style: `--seat: ${seat.color}; --ink-color: ${seat.ink}`,
     },
     children: [
       h('div', {

@@ -55,16 +55,22 @@ export interface TerrainStyle {
   readonly fill: string;
 }
 
+/**
+ * Terrain fills, tuned to sit against a dark shell rather than to be bright on their own. The
+ * board layers a bevel and a grain over these (see `board.ts`), both of which lighten the top of
+ * every tile — so the flat colour here is deliberately a shade deeper than the tile reads.
+ */
 const TERRAIN: Readonly<Record<string, TerrainStyle>> = {
-  hills: { label: 'Hills', fill: '#b2622f' },
-  forest: { label: 'Forest', fill: '#2f6b3f' },
-  mountains: { label: 'Mountains', fill: '#77767a' },
-  fields: { label: 'Fields', fill: '#d9b23a' },
-  pasture: { label: 'Pasture', fill: '#8cbf5a' },
-  desert: { label: 'Desert', fill: '#ddc89a' },
+  hills: { label: 'Hills', fill: '#a9572b' },
+  forest: { label: 'Forest', fill: '#2d6440' },
+  mountains: { label: 'Mountains', fill: '#6f727a' },
+  fields: { label: 'Fields', fill: '#cfa733' },
+  pasture: { label: 'Pasture', fill: '#7fb254' },
+  desert: { label: 'Desert', fill: '#d6c096' },
 };
 
-export const SEA_FILL = '#2b5f86';
+/** The mid-tone of the water. `board.ts` grades around it; this is what a sea hex falls back to. */
+export const SEA_FILL = '#1d4d70';
 
 export function terrainStyle(terrain: TerrainId | null): TerrainStyle {
   if (terrain === null) return { label: 'Unknown', fill: '#4a4a4a' };
@@ -78,12 +84,13 @@ export interface CardStyle {
   readonly color: string;
 }
 
+/** A card is the colour of the land that makes it, so a hand reads back onto the board. */
 const CARDS: Readonly<Record<string, CardStyle>> = {
-  brick: { label: 'Brick', color: '#b2622f' },
-  lumber: { label: 'Lumber', color: '#2f6b3f' },
-  ore: { label: 'Ore', color: '#77767a' },
-  grain: { label: 'Grain', color: '#d9b23a' },
-  wool: { label: 'Wool', color: '#8cbf5a' },
+  brick: { label: 'Brick', color: '#a9572b' },
+  lumber: { label: 'Lumber', color: '#2d6440' },
+  ore: { label: 'Ore', color: '#6f727a' },
+  grain: { label: 'Grain', color: '#cfa733' },
+  wool: { label: 'Wool', color: '#7fb254' },
 };
 
 export function cardStyle(kind: CardKind): CardStyle {

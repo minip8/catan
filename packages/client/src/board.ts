@@ -9,6 +9,18 @@
  * Piece shapes are a small table with a fallback, for the same reason the theme is: `PieceKind` is
  * an open union, and a ruleset that adds a ship or a knight should get a plausible marker rather
  * than nothing at all.
+ *
+ * Depth comes from a single `<defs>` block rather than from per-terrain artwork. Two rules make
+ * that work over an open taxonomy:
+ *
+ * - **Shading is neutral alpha, never a computed colour.** A lit roof is white at 16%, a shaded
+ *   wall is black at 20%. Seat colours past the published six are `hsl()` strings from
+ *   `seatStyle`'s fallback, and alpha composites over any of them without colour maths.
+ * - **One gradient serves every hex.** The bevel is in `objectBoundingBox` units and the hexes are
+ *   all one size, so a single definition lights all nineteen identically.
+ *
+ * The grain is a declarative `<pattern>` and deliberately not `feTurbulence`: the app re-renders
+ * the whole SVG on every action, and a per-hex turbulence filter would be re-rasterised each time.
  */
 
 import type { LocusId } from '@catan/core';
@@ -22,6 +34,7 @@ export interface BoardHandlers {
 }
 
 export function boardSvg(scene: Scene, handlers: BoardHandlers): SVGElement {
+  const [x = 0, y = 0, width = 0, height = 0] = scene.viewBox.split(' ').map(Number);
   return s('svg', {
     attrs: {
       class: 'board',
@@ -31,6 +44,11 @@ export function boardSvg(scene: Scene, handlers: BoardHandlers): SVGElement {
       'aria-label': 'Game board',
     },
     children: [
+      defs(),
+      // The water is one graded body behind everything. Sea hexes still draw (they are part of the
+      // scene, and the topology is what says where the coast is) but blend into it, so the ocean
+      // does not read as a honeycomb of blue tiles.
+      s('rect', { attrs: { class: 'sea', x, y, width, height, fill: 'url(#b-sea)' } }),
       s('g', {
         attrs: { class: 'hexes' },
         children: scene.hexes.map((hex) => hexGroup(hex, scene.size)),
@@ -51,21 +69,105 @@ export function boardSvg(scene: Scene, handlers: BoardHandlers): SVGElement {
   });
 }
 
+// ── Paint ───────────────────────────────────────────────────────────────────────────────────
+
+/**
+ * The four pieces of paint the board reuses. Ids are prefixed `b-` because they land in the
+ * document's global id space, which the panels also live in.
+ */
+function defs(): SVGElement {
+  return s('defs', {
+    children: [
+      // The bevel. Light from the upper left, shadow gathering at the lower right — the whole of
+      // why a tile reads as raised rather than as a coloured shape.
+      s('radialGradient', {
+        attrs: { id: 'b-sheen', cx: '0.34', cy: '0.24', r: '0.92' },
+        children: [
+          stop('0', '#ffffff', '0.20'),
+          stop('0.5', '#ffffff', '0.03'),
+          stop('1', '#000000', '0.26'),
+        ],
+      }),
+      // Terrain grain: four specks in a rotated tile, rendered once and repeated across all land.
+      s('pattern', {
+        attrs: {
+          id: 'b-grain',
+          width: 14,
+          height: 14,
+          patternUnits: 'userSpaceOnUse',
+          patternTransform: 'rotate(24)',
+        },
+        children: [
+          speck(3.0, 2.5, 1.15, '#ffffff', '0.05'),
+          speck(10.2, 6.8, 0.9, '#000000', '0.06'),
+          speck(6.1, 11.4, 1.0, '#ffffff', '0.035'),
+          speck(12.6, 1.4, 0.7, '#000000', '0.05'),
+        ],
+      }),
+      // Deeper water towards the rim, so the island sits in a basin rather than on a flat field.
+      s('radialGradient', {
+        attrs: { id: 'b-sea', cx: '0.5', cy: '0.46', r: '0.74' },
+        children: [
+          stop('0', '#2a6d99', '1'),
+          stop('0.6', '#1d4d70', '1'),
+          stop('1', '#0f2f47', '1'),
+        ],
+      }),
+      // One lift, shared by tokens, harbour badges and pieces.
+      s('filter', {
+        attrs: { id: 'b-raise', x: '-40%', y: '-40%', width: '180%', height: '180%' },
+        children: [
+          s('feDropShadow', {
+            attrs: {
+              dx: 0,
+              dy: 1.8,
+              stdDeviation: 1.6,
+              'flood-color': '#000000',
+              'flood-opacity': 0.45,
+            },
+          }),
+        ],
+      }),
+    ],
+  });
+}
+
+function stop(offset: string, color: string, opacity: string): SVGElement {
+  return s('stop', {
+    attrs: { offset, 'stop-color': color, 'stop-opacity': opacity },
+  });
+}
+
+function speck(cx: number, cy: number, r: number, fill: string, opacity: string): SVGElement {
+  return s('circle', { attrs: { cx, cy, r, fill, 'fill-opacity': opacity } });
+}
+
 // ── Hexes ───────────────────────────────────────────────────────────────────────────────────
 
 function hexGroup(hex: HexShape, size: number): SVGElement {
   const style = terrainStyle(hex.terrain);
   const water = hex.class === 'sea';
+  const outline = hex.points.map((p) => `${p.x.toFixed(1)},${p.y.toFixed(1)}`).join(' ');
   const children: SVGElement[] = [
     s('polygon', {
       attrs: {
         class: `hex hex-${hex.class}${hex.blocked ? ' hex-blocked' : ''}`,
-        points: hex.points.map((p) => `${p.x.toFixed(1)},${p.y.toFixed(1)}`).join(' '),
+        points: outline,
         fill: water ? SEA_FILL : style.fill,
       },
       children: [s('title', { children: [water ? 'Sea' : style.label] })],
     }),
   ];
+
+  // Grain then bevel, over the same outline. Land only: the sea is meant to look flat and wet.
+  // Neither carries the `hex` class — `app.test.ts` counts one `.hex` per hex group — and both are
+  // transparent to the pointer so the tile's own tooltip and hit area survive underneath.
+  if (!water) {
+    children.push(
+      s('polygon', { attrs: { class: 'hex-grain', points: outline, fill: 'url(#b-grain)' } }),
+      s('polygon', { attrs: { class: 'hex-sheen', points: outline, fill: 'url(#b-sheen)' } }),
+    );
+  }
 
   if (!water && hex.terrain !== null) {
     children.push(
@@ -106,6 +208,9 @@ function tokenGroup(x: number, y: number, size: number, token: Token): SVGElemen
     attrs: { class: `token${token.hot ? ' token-hot' : ''}` },
     children: [
       s('circle', { attrs: { cx: x, cy: y, r: radius, class: 'token-face' } }),
+      // An inset ring, the way a printed token is bordered. Red on a 6 or an 8, so the two hot
+      // numbers are findable by shape as well as by colour.
+      s('circle', { attrs: { cx: x, cy: y, r: radius * 0.84, class: 'token-ring' } }),
       s('text', {
         attrs: { x, y: y + radius * 0.12, 'text-anchor': 'middle', class: 'token-value' },
         children: [token.value],
@@ -118,17 +223,15 @@ function tokenGroup(x: number, y: number, size: number, token: Token): SVGElemen
 // ── Harbours ────────────────────────────────────────────────────────────────────────────────
 
 function dockGroup(dock: DockShape, size: number): SVGElement[] {
-  const out: SVGElement[] = dock.anchors.map((anchor) =>
-    s('line', {
-      attrs: {
-        class: 'dock-line',
-        x1: anchor.x,
-        y1: anchor.y,
-        x2: dock.at.x,
-        y2: dock.at.y,
-      },
-    }),
-  );
+  // Each mooring is drawn twice: a dark pier under a pale plank, which is what lets a thin line
+  // stay legible over water that is now graded rather than flat.
+  const out: SVGElement[] = dock.anchors.flatMap((anchor) => {
+    const ends = { x1: anchor.x, y1: anchor.y, x2: dock.at.x, y2: dock.at.y };
+    return [
+      s('line', { attrs: { class: 'dock-pier', ...ends } }),
+      s('line', { attrs: { class: 'dock-line', ...ends } }),
+    ];
+  });
   const label = dock.kind === null ? 'any' : cardStyle(dock.kind).label;
   out.push(
     s('g', {
@@ -176,63 +279,181 @@ function pieceGroup(piece: PieceShape, size: number): SVGElement {
 
   return s('g', {
     attrs: { class: `piece piece-${piece.kind}`, id: `piece-${piece.id}`, transform },
-    children: [shapeFor(piece.kind, size, fill)],
+    children: shapeFor(piece.kind, size, fill),
   });
 }
 
-/** The drawn form of a piece. Unknown kinds get a disc, which is better than nothing. */
-function shapeFor(kind: string, size: number, fill: string): SVGElement {
+/**
+ * The drawn form of a piece: a seat-coloured silhouette, then neutral shading over it. Unknown
+ * kinds get a disc, which is better than nothing.
+ */
+function shapeFor(kind: string, size: number, fill: string): SVGElement[] {
   switch (kind) {
     case 'road':
-      return s('rect', {
-        attrs: {
-          x: -size * 0.4,
-          y: -size * 0.08,
-          width: size * 0.8,
-          height: size * 0.16,
-          rx: size * 0.05,
-          fill,
-          class: 'road',
-        },
-      });
+      return road(size * 0.4, fill);
     case 'settlement':
-      return s('polygon', {
-        attrs: { points: house(size * 0.3), fill, class: 'building' },
-      });
+      return settlement(size * 0.3, fill);
     case 'city':
-      return s('polygon', {
-        attrs: { points: tower(size * 0.36), fill, class: 'building' },
-      });
+      return city(size * 0.36, fill);
     case 'robber':
-      return s('circle', { attrs: { r: size * 0.2, fill: '#26221f', class: 'robber' } });
+      return robber(size * 0.22);
     default:
-      return s('circle', { attrs: { r: size * 0.18, fill, class: 'building' } });
+      return [s('circle', { attrs: { r: size * 0.18, fill, class: 'building' } })];
   }
 }
 
-/** A gabled house, centred on the origin. */
-function house(r: number): string {
-  return points([
-    [-r, r * 0.6],
-    [-r, -r * 0.2],
-    [0, -r],
-    [r, -r * 0.2],
-    [r, r * 0.6],
-  ]);
+/** A plank with the light catching its upper edge. */
+function road(r: number, fill: string): SVGElement[] {
+  const thickness = r * 0.4;
+  return [
+    s('rect', {
+      attrs: {
+        x: -r,
+        y: -thickness,
+        width: r * 2,
+        height: thickness * 2,
+        rx: r * 0.125,
+        fill,
+        class: 'road',
+      },
+    }),
+    s('rect', {
+      attrs: {
+        x: -r * 0.94,
+        y: -thickness * 0.86,
+        width: r * 1.88,
+        height: thickness * 0.72,
+        rx: r * 0.1,
+        fill: '#ffffff',
+        'fill-opacity': 0.18,
+        class: 'shade',
+      },
+    }),
+  ];
 }
 
-/** A house with a taller wing — the city silhouette. */
-function tower(r: number): string {
-  return points([
-    [-r, r * 0.55],
-    [-r, -r * 0.25],
-    [-r * 0.45, -r * 0.85],
-    [0, -r * 0.25],
-    [0, -r * 0.55],
-    [r * 0.5, -r * 0.55],
-    [r, -r * 0.05],
-    [r, r * 0.55],
-  ]);
+/** A gabled house: lit roof, shaded right wall. */
+function settlement(r: number, fill: string): SVGElement[] {
+  return [
+    s('polygon', {
+      attrs: {
+        points: points([
+          [-r, r * 0.6],
+          [-r, -r * 0.2],
+          [0, -r],
+          [r, -r * 0.2],
+          [r, r * 0.6],
+        ]),
+        fill,
+        class: 'building',
+      },
+    }),
+    shade(
+      [
+        [-r, -r * 0.2],
+        [0, -r],
+        [r, -r * 0.2],
+      ],
+      '#ffffff',
+      0.16,
+    ),
+    shade(
+      [
+        [r * 0.25, -r * 0.8],
+        [r, -r * 0.2],
+        [r, r * 0.6],
+        [r * 0.25, r * 0.6],
+      ],
+      '#000000',
+      0.2,
+    ),
+  ];
+}
+
+/** A house with a taller wing — the city silhouette, lit and shaded the same way. */
+function city(r: number, fill: string): SVGElement[] {
+  return [
+    s('polygon', {
+      attrs: {
+        points: points([
+          [-r, r * 0.55],
+          [-r, -r * 0.25],
+          [-r * 0.45, -r * 0.85],
+          [0, -r * 0.25],
+          [0, -r * 0.55],
+          [r * 0.5, -r * 0.55],
+          [r, -r * 0.05],
+          [r, r * 0.55],
+        ]),
+        fill,
+        class: 'building',
+      },
+    }),
+    shade(
+      [
+        [-r, -r * 0.25],
+        [-r * 0.45, -r * 0.85],
+        [0, -r * 0.25],
+      ],
+      '#ffffff',
+      0.18,
+    ),
+    shade(
+      [
+        [r * 0.5, -r * 0.55],
+        [r, -r * 0.05],
+        [r, r * 0.55],
+        [r * 0.5, r * 0.55],
+      ],
+      '#000000',
+      0.2,
+    ),
+  ];
+}
+
+/**
+ * A pawn, drawn as one path so the cream outline runs round the silhouette rather than through
+ * the neck. The arc is the head; the two curves are the shoulders falling to the base.
+ */
+function robber(r: number): SVGElement[] {
+  const d = [
+    `M ${(-r * 0.9).toFixed(1)} ${(r * 1.0).toFixed(1)}`,
+    `C ${(-r * 0.72).toFixed(1)} ${(r * 0.25).toFixed(1)},`,
+    `${(-r * 0.42).toFixed(1)} ${(r * 0.05).toFixed(1)},`,
+    `${(-r * 0.34).toFixed(1)} ${(-r * 0.3).toFixed(1)}`,
+    `A ${(r * 0.42).toFixed(1)} ${(r * 0.42).toFixed(1)} 0 1 1`,
+    `${(r * 0.34).toFixed(1)} ${(-r * 0.3).toFixed(1)}`,
+    `C ${(r * 0.42).toFixed(1)} ${(r * 0.05).toFixed(1)},`,
+    `${(r * 0.72).toFixed(1)} ${(r * 0.25).toFixed(1)},`,
+    `${(r * 0.9).toFixed(1)} ${(r * 1.0).toFixed(1)}`,
+    'Z',
+  ].join(' ');
+  return [
+    s('path', { attrs: { d, fill: '#2b2521', class: 'robber' } }),
+    // Kept below the neck: the shoulders are a cubic, and a straight highlight taken any higher
+    // would cut outside the curve it is meant to sit on.
+    shade(
+      [
+        [-r * 0.78, r * 1.0],
+        [-r * 0.45, r * 0.09],
+        [-r * 0.24, r * 0.09],
+        [-r * 0.4, r * 1.0],
+      ],
+      '#ffffff',
+      0.14,
+    ),
+  ];
+}
+
+/** A neutral highlight or shadow over a piece. Alpha, so it works over any seat colour. */
+function shade(
+  pairs: readonly (readonly [number, number])[],
+  fill: string,
+  opacity: number,
+): SVGElement {
+  return s('polygon', {
+    attrs: { points: points(pairs), fill, 'fill-opacity': opacity, class: 'shade' },
+  });
 }
 
 function points(pairs: readonly (readonly [number, number])[]): string {

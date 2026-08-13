@@ -51,9 +51,10 @@ an action's field names.
 | `theme.ts` | names and colours, with a fallback for every open taxonomy |
 | `targets.ts` | `ActionSpec[]` → spots on the board and buttons in the bar |
 | `scene.ts` | the board as pure data, positioned by core's layout helpers |
-| `board.ts` | scene → SVG |
+| `board.ts` | scene → SVG, and the `<defs>` every tile and piece draws its depth from |
 | `narrate.ts` | events → log lines, actions → button labels |
 | `panels.ts` | scoreboard, hand, bank, action bar, log, composer forms |
+| `styles.css` | the only stylesheet; `--seat`, `--card` and `--ink-color` are the bridge from the panels |
 | `table.ts` | the seam: `Snapshot`, `Table`, and the hot-seat implementation |
 | `remote.ts` | the same seam over a websocket, with reconnection |
 | `app.ts` | the table, the seat, and the render loop |

@@ -108,11 +108,11 @@ describe('Rooms', () => {
     const room = await rooms.create({ players: 3, seed: 7 });
     room.join({ token: null, name: null });
 
+    // No seed: the game is in progress, and a seed re-deals the deck.
     expect(rooms.summaries()).toEqual([
       {
         id: room.id,
         scenarioId: 'catan/base/3-4',
-        seed: 7,
         players: 3,
         at: 0,
         over: false,

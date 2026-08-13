@@ -47,6 +47,15 @@ describe('redactFor', () => {
     expect(JSON.stringify(redactFor(state, p0))).not.toContain('"rng":[');
   });
 
+  it('never ships the seed, which would re-deal the deck', () => {
+    for (const viewer of [p0, p1, null]) {
+      expect(redactFor(state, viewer).seed).toBeNull();
+    }
+    // The concrete attack: `newGame` is deterministic in `(seed, scenarioId, ruleSetId, players)`
+    // and the last three are public, so a leaked seed is the draw pile spelled differently.
+    expect(JSON.stringify(redactFor(state, p0))).not.toContain(`"seed":${game.state.seed}`);
+  });
+
   it('replaces the draw pile with a count', () => {
     const view = redactFor(state, p0);
     expect(view.decks.dev?.remaining).toBe(24);

@@ -98,5 +98,19 @@ describe('a game over the wire', () => {
     // And the log each client kept is its own: the winner's is at least as long as a spectator's
     // would be, because only they were told what they drew.
     expect(red.snapshot().events.length).toBeGreaterThan(60);
+
+    // No client was ever told the seed, which would have re-dealt the deck they were betting on.
+    for (const table of tables) expect(table.snapshot().view.seed).toBeNull();
+
+    // Now that the game is over there is nothing left to bet on, so the record — and the seed
+    // inside it — becomes public. Hidden while it matters, quotable once it does not.
+    const finished = await fetch(`${server.url}/rooms/${room}/record`);
+    expect(finished.status).toBe(200);
+    expect((await finished.json()) as { seed: number }).toMatchObject({ seed: 5 });
+
+    const listed = (await (await fetch(`${server.url}/rooms`)).json()) as {
+      rooms: { seed?: number }[];
+    };
+    expect(listed.rooms[0]?.seed).toBe(5);
   });
 });

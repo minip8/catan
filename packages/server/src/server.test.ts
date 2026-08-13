@@ -12,7 +12,7 @@ import { replay } from '@catan/core';
 import { afterEach, describe, expect, it } from 'vitest';
 
 import type { ServerMessage } from './protocol.js';
-import { type RunningServer, startServer } from './server.js';
+import { type RunningServer, type ServerOptions, startServer } from './server.js';
 
 const running: RunningServer[] = [];
 const open: Client[] = [];
@@ -22,8 +22,8 @@ afterEach(async () => {
   for (const server of running.splice(0)) await server.close();
 });
 
-async function serve(): Promise<RunningServer> {
-  const server = await startServer({ secret: 'test-secret', log: () => {} });
+async function serve(options: Partial<ServerOptions> = {}): Promise<RunningServer> {
+  const server = await startServer({ secret: 'test-secret', log: () => {}, ...options });
   running.push(server);
   return server;
 }
@@ -123,7 +123,9 @@ describe('HTTP', () => {
     const created = await post(`${server.url}/rooms`, { players: 4, seed: 11 });
 
     expect(created.status).toBe(201);
-    expect(created.body).toMatchObject({ players: 4, seed: 11, scenarioId: 'catan/base/3-4' });
+    expect(created.body).toMatchObject({ players: 4, scenarioId: 'catan/base/3-4' });
+    // Not even to the caller who chose it: they are about to sit down at this table.
+    expect(created.body).not.toHaveProperty('seed');
 
     const listed = (await (await fetch(`${server.url}/rooms`)).json()) as {
       rooms: { id: string }[];
@@ -222,7 +224,7 @@ describe('playing over a socket', () => {
   });
 
   it('serves a record that rebuilds the game it is holding', async () => {
-    const server = await serve();
+    const server = await serve({ adminSecret: 'open-sesame' });
     const { body } = await post(`${server.url}/rooms`, { players: 3, seed: 11 });
     const room = body.id as string;
 
@@ -236,9 +238,48 @@ describe('playing over a socket', () => {
     }
     await client.expect('update', (message) => message.at >= 2);
 
-    const record = await (await fetch(`${server.url}/rooms/${room}/record`)).json();
-    const rebuilt = replay(record as never);
+    const response = await fetch(`${server.url}/rooms/${room}/record`, {
+      headers: { authorization: 'Bearer open-sesame' },
+    });
+    const rebuilt = replay((await response.json()) as never);
     expect(rebuilt.state).toEqual(server.rooms.get(room)?.session.state);
     expect((await fetch(`${server.url}/rooms/nosuch/record`)).status).toBe(404);
+  });
+
+  /**
+   * The record holds the seed and `newGame` is deterministic from it, so handing one out mid-game
+   * hands out the deck. These are the routes that used to do exactly that.
+   */
+  it('keeps the seed of a game in progress off every public route', async () => {
+    const server = await serve({ adminSecret: 'open-sesame' });
+    const { body } = await post(`${server.url}/rooms`, { players: 3, seed: 11 });
+    const room = body.id as string;
+
+    const refused = await fetch(`${server.url}/rooms/${room}/record`);
+    expect(refused.status).toBe(403);
+    expect(JSON.stringify(await refused.json())).not.toContain('11');
+
+    expect(await (await fetch(`${server.url}/rooms`)).text()).not.toContain('"seed"');
+
+    // A wrong secret is no better than none, and neither is the right one under a made-up scheme.
+    for (const authorization of ['Bearer wrong', 'open-sesame', 'Basic open-sesame']) {
+      const attempt = await fetch(`${server.url}/rooms/${room}/record`, {
+        headers: { authorization },
+      });
+      expect(attempt.status).toBe(403);
+    }
+  });
+
+  it('has no admin at all when no secret was configured', async () => {
+    const server = await serve();
+    const { body } = await post(`${server.url}/rooms`, { players: 3, seed: 11 });
+    const room = body.id as string;
+
+    for (const authorization of ['Bearer undefined', 'Bearer ', 'Bearer null']) {
+      const attempt = await fetch(`${server.url}/rooms/${room}/record`, {
+        headers: { authorization },
+      });
+      expect(attempt.status).toBe(403);
+    }
   });
 });

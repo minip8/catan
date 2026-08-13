@@ -13,6 +13,7 @@
  * | `DATA_DIR` | where game records are written. Unset means memory only |
  * | `SECRET` | signs seat tokens. Unset means a new one per boot, so seats do not survive restarts |
  * | `STATIC_DIR` | a built client to serve. Defaults to `packages/client/dist` when it is there |
+ * | `ADMIN_SECRET` | reads the record of a game still in progress. Unset means nobody can |
  */
 
 import { stat } from 'node:fs/promises';
@@ -26,6 +27,7 @@ const port = Number(process.env.PORT ?? 3000);
 const host = process.env.HOST ?? '127.0.0.1';
 const dataDir = process.env.DATA_DIR;
 const secret = process.env.SECRET;
+const adminSecret = process.env.ADMIN_SECRET;
 
 if (secret === undefined) {
   console.warn(
@@ -46,6 +48,7 @@ const server = await startServer({
   host,
   store: dataDir === undefined ? new MemoryStore() : new FileStore(dataDir),
   ...(secret === undefined ? {} : { secret }),
+  ...(adminSecret === undefined ? {} : { adminSecret }),
   ...(staticDir === undefined ? {} : { staticDir }),
 });
 

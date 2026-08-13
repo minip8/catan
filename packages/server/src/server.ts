@@ -31,7 +31,7 @@ import type { Broadcast, Room } from './room.js';
 import { Rooms } from './rooms.js';
 import { serveStatic } from './static.js';
 import { MemoryStore, type RecordStore } from './store.js';
-import { ephemeralSecret, hmacTokens } from './tokens.js';
+import { ephemeralSecret, hmacTokens, secretEquals } from './tokens.js';
 
 export interface ServerOptions {
   readonly port?: number;
@@ -49,6 +49,14 @@ export interface ServerOptions {
    * server is an API and something else hosts the files.
    */
   readonly staticDir?: string;
+  /**
+   * Unlocks the record of a game still being played, as `Authorization: Bearer <secret>`.
+   *
+   * For the operator chasing a desync, who needs the log of a game that has not finished. Leave it
+   * unset and no request can obtain one — which is the right default, because the audience for a
+   * live record is one person and the audience for the internet is everyone.
+   */
+  readonly adminSecret?: string;
 }
 
 export interface RunningServer {
@@ -80,10 +88,12 @@ export async function startServer(options: ServerOptions = {}): Promise<RunningS
   const clients = new Set<Client>();
   const sockets = new WebSocketServer({ noServer: true });
   const http = createHttpServer((request, response) => {
-    void handleHttp(request, response, rooms, options.staticDir).catch((cause: unknown) => {
-      log(`http: ${String(cause)}`);
-      send(response, 500, { error: 'internal error' });
-    });
+    void handleHttp(request, response, rooms, options.staticDir, options.adminSecret).catch(
+      (cause: unknown) => {
+        log(`http: ${String(cause)}`);
+        send(response, 500, { error: 'internal error' });
+      },
+    );
   });
 
   http.on('upgrade', (request, socket, head) => {
@@ -224,14 +234,17 @@ async function handleHttp(
   response: ServerResponse,
   rooms: Rooms,
   staticDir: string | undefined,
+  adminSecret: string | undefined,
 ): Promise<void> {
   const url = new URL(request.url ?? '/', 'http://localhost');
   const path = url.pathname;
 
   // The API carries no cookies — a seat is proved by a token inside the websocket session — so
   // there is no ambient authority for another origin to borrow, and no CSRF surface to protect.
+  // `authorization` is allowed through because it is the one credential a caller sends by hand;
+  // being header-borne rather than ambient is exactly what keeps the paragraph above true.
   response.setHeader('Access-Control-Allow-Origin', '*');
-  response.setHeader('Access-Control-Allow-Headers', 'content-type');
+  response.setHeader('Access-Control-Allow-Headers', 'content-type, authorization');
   response.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
   if (request.method === 'OPTIONS') {
     response.writeHead(204).end();
@@ -268,10 +281,12 @@ async function handleHttp(
       players,
       ...(typeof seedField === 'number' ? { seed: seedField } : {}),
     });
+    // No seed in the reply, even though the caller supplied one and could have kept it: whoever
+    // creates the room is usually about to sit down at it, and a player holding the seed is a
+    // player holding the deck.
     send(response, 201, {
       id: room.id,
       players: room.seats.length,
-      seed: room.session.state.seed,
       scenarioId: room.session.state.scenarioId,
     });
     return;
@@ -285,7 +300,16 @@ async function handleHttp(
       return;
     }
     // The whole game, as decisions. Small enough to paste into a bug report, and enough to rebuild
-    // the room exactly — which is what makes a desync report actionable.
+    // the room exactly — which is what makes a desync report actionable. That same completeness is
+    // why a game still being played will not hand it over: the record holds the seed, and the seed
+    // re-deals the deck. Finished games are public; live ones need the operator's secret.
+    if (!room.over && !isAdmin(request, adminSecret)) {
+      send(response, 403, {
+        error:
+          'the record of a game in progress is not public; finish the game or supply ADMIN_SECRET',
+      });
+      return;
+    }
     send(response, 200, room.record);
     return;
   }
@@ -296,6 +320,20 @@ async function handleHttp(
   }
 
   send(response, 404, { error: 'no such route' });
+}
+
+/**
+ * Whether this request carries the operator's secret.
+ *
+ * False whenever no secret is configured, which is the safe direction: a server that was never
+ * given one has no admin, rather than an admin anyone can be by sending nothing.
+ */
+function isAdmin(request: IncomingMessage, adminSecret: string | undefined): boolean {
+  if (adminSecret === undefined) return false;
+  const header = request.headers.authorization;
+  if (header === undefined) return false;
+  const [scheme, value] = header.split(' ');
+  return scheme === 'Bearer' && value !== undefined && secretEquals(value, adminSecret);
 }
 
 function send(response: ServerResponse, status: number, body: unknown): void {

@@ -1,11 +1,16 @@
 /**
  * Redaction — what one player is allowed to see.
  *
- * The server holds the whole truth; every client gets a `PlayerView` of it. Three things are
+ * The server holds the whole truth; every client gets a `PlayerView` of it. Four things are
  * hidden, and each of them would break the game if it leaked:
  *
  * - **`rng`.** A client holding the generator state can compute every future dice roll and the
  *   entire remaining deck order. This is the single most important field to strip.
+ * - **`seed`.** The same secret one step earlier. `newGame` is deterministic given
+ *   `(seed, scenarioId, ruleSetId, players)` — every one of which is public — so a seed is not a
+ *   weaker leak than the generator, it is the same leak in a smaller field: deal the game again
+ *   from it and read the draw pile off the copy. Stripping `rng` while shipping `seed` protects
+ *   nothing, which is why both leave together.
  * - **Draw-pile order.** Replaced by a count. Which card is next is exactly what buying a
  *   development card is a bet on.
  * - **Card identities.** A card's *definition* is visible only if the viewer holds it, if it has
@@ -36,11 +41,13 @@ export interface DeckFacts {
   readonly discard: readonly CardId[];
 }
 
-export interface PlayerView extends Omit<GameState, 'rng' | 'decks' | 'cardInstances'> {
+export interface PlayerView extends Omit<GameState, 'rng' | 'seed' | 'decks' | 'cardInstances'> {
   /** Who this view was built for. `null` for a spectator or a public feed. */
   readonly viewer: PlayerId | null;
   /** Always `null`: proof, in the type, that the generator did not travel. */
   readonly rng: null;
+  /** Always `null`: the same proof for the value the generator was built from. */
+  readonly seed: null;
   readonly decks: Readonly<Record<DeckId, DeckFacts>>;
   readonly cardInstances: Readonly<Record<CardId, CardFacts>>;
 }
@@ -71,8 +78,8 @@ export function redactFor(state: GameState, viewer: PlayerId | null): PlayerView
     decks[id as DeckId] = { remaining: deck.draw.length, discard: deck.discard };
   }
 
-  const { rng: _rng, decks: _decks, cardInstances: _instances, ...rest } = state;
-  return { ...rest, viewer, rng: null, decks, cardInstances };
+  const { rng: _rng, seed: _seed, decks: _decks, cardInstances: _instances, ...rest } = state;
+  return { ...rest, viewer, rng: null, seed: null, decks, cardInstances };
 }
 
 /** The cards whose identity `viewer` is entitled to know. */

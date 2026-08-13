@@ -45,7 +45,15 @@ export interface CreateOptions {
 export interface RoomSummary {
   readonly id: string;
   readonly scenarioId: string;
-  readonly seed: number;
+  /**
+   * Present only once the game is over.
+   *
+   * A seed re-deals the game, so while one is being played it is the draw pile written another
+   * way — see the note in core's `view.ts`. When the game is finished there is nothing left to
+   * bet on, and the seed becomes what it should have been all along: the thing you quote to
+   * reproduce a game someone is asking about.
+   */
+  readonly seed?: number;
   readonly players: number;
   readonly at: number;
   readonly over: boolean;
@@ -134,7 +142,7 @@ export class Rooms {
     return [...this.live.values()].map((room) => ({
       id: room.id,
       scenarioId: room.session.state.scenarioId,
-      seed: room.session.state.seed,
+      ...(room.over ? { seed: room.session.state.seed } : {}),
       players: room.seats.length,
       at: room.at,
       over: room.over,

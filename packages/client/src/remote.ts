@@ -85,7 +85,8 @@ export function browserSeats(): SeatStore {
 export interface RoomSummary {
   readonly id: string;
   readonly players: number;
-  readonly seed: number;
+  /** Absent while the game is in progress: a seed re-deals the deck, so the server keeps it. */
+  readonly seed?: number;
   readonly scenarioId: string;
 }
 

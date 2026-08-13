@@ -50,6 +50,17 @@ export function hmacTokens(secret: string): Tokens {
   };
 }
 
+/**
+ * Constant-time string comparison, for any secret this server is handed.
+ *
+ * Exported because seat tokens are not the only credential — the admin secret that unlocks an
+ * in-progress record is compared with the same care, and a second hand-rolled comparison is a
+ * second chance to write `===`.
+ */
+export function secretEquals(a: string, b: string): boolean {
+  return equals(a, b);
+}
+
 function equals(a: string, b: string): boolean {
   const left = Buffer.from(a);
   const right = Buffer.from(b);

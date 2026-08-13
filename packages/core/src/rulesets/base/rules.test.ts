@@ -252,7 +252,8 @@ describe('the 7', () => {
     const step = currentStep(state);
     expect(step?.kind).toBe('discard');
     expect(step?.actor).toContain(p0);
-    expect((step?.data?.owed as Record<string, number>)[p0]).toBe(Math.floor(held / 2));
+    const owed = step?.data?.owed as Record<string, number> | undefined;
+    expect(owed?.[p0]).toBe(Math.floor(held / 2));
 
     refuse(game.ctx, state, p0, { type: 'discard', cards: { brick: 1 } }, 'malformed');
 

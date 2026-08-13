@@ -1,5 +1,6 @@
 {
   "$schema": "https://json.schemastore.org/tsconfig",
+  "//types": "No ambient type packages unless a project opts in. The engine's purity is a claim about what it can reach, and auto-including whatever @types/* happens to be installed would quietly hand it `process`, `Buffer` and `structuredClone` the moment some other package needed Node types.",
   "compilerOptions": {
     "target": "ES2023",
     "lib": ["ES2023"],
@@ -17,6 +18,7 @@
     "noUnusedParameters": true,
     "erasableSyntaxOnly": true,
     "isolatedModules": true,
+    "types": [],
 
     "declaration": true,
     "declarationMap": true,

@@ -12,8 +12,9 @@
   },
   "scripts": {
     "dev": "npm run dev --workspace @catan/client",
+    "serve": "npm run start --workspace @catan/server",
     "build": "tsc --build && npm run build --workspace @catan/client",
-    "typecheck": "tsc --build --force && tsc -p packages/core/tsconfig.test.json && tsc -p packages/client/tsconfig.json",
+    "typecheck": "tsc --build --force && tsc -p packages/core/tsconfig.test.json && tsc -p packages/server/tsconfig.test.json && tsc -p packages/client/tsconfig.json",
     "test": "vitest run",
     "test:watch": "vitest",
     "check": "biome check .",

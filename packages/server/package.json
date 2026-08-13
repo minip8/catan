@@ -1,0 +1,31 @@
+{
+  "name": "@catan/server",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Multiplayer server: rooms holding a core Session, websockets, per-seat auth, and the action log on disk.",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "bin": {
+    "catan-server": "./dist/main.js"
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsc --build",
+    "start": "node dist/main.js"
+  },
+  "dependencies": {
+    "@catan/core": "*",
+    "ws": "^8.18.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.15.0",
+    "@types/ws": "^8.5.13"
+  }
+}

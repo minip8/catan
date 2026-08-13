@@ -192,7 +192,7 @@ function dockShapes(ctx: RuleContext, view: PlayerView, layout: Layout): readonl
     const anchors = group.map((v) => vertexToPixel(layout, v));
     out.push({
       anchors,
-      at: seaward(ctx, view, layout, group, midpoint(anchors)),
+      at: seaward(ctx, view, layout, group, midpoint(anchors), anchors),
       label: `${spec.ratio}:1`,
       kind: spec.kind,
     });
@@ -200,13 +200,26 @@ function dockShapes(ctx: RuleContext, view: PlayerView, layout: Layout): readonl
   return out;
 }
 
-/** Push a point away from the land the dock is attached to, so the badge sits in the water. */
+/**
+ * Push a point away from the land the dock is attached to, so the badge sits in the water.
+ *
+ * Both intersections may trade through the harbour, so the badge belongs to them equally and is
+ * placed on their **perpendicular bisector** — the one line every point of which is the same
+ * distance from each. Anything else makes the two mooring lines different lengths.
+ *
+ * Heading straight out from the land does *not* satisfy that. `land` collects the hexes adjacent
+ * to either intersection, and on a coast those counts are lopsided — typically two for one corner
+ * and one for the other — so its mean sits nearer the busier corner and the badge slides along the
+ * chord towards it. That bias is harmless for choosing *which way* is out to sea, which is all
+ * `inland` is used for now.
+ */
 function seaward(
   ctx: RuleContext,
   view: PlayerView,
   layout: Layout,
   vertices: readonly VertexId[],
   from: Point,
+  anchors: readonly Point[],
 ): Point {
   const land: Point[] = [];
   for (const vertex of vertices) {
@@ -215,12 +228,28 @@ function seaward(
     }
   }
   if (land.length === 0) return from;
+
   const inland = midpoint(land);
-  const dx = from.x - inland.x;
-  const dy = from.y - inland.y;
-  const length = Math.hypot(dx, dy) || 1;
   const reach = HEX_SIZE * 0.5;
-  return { x: from.x + (dx / length) * reach, y: from.y + (dy / length) * reach };
+  const out = { x: from.x - inland.x, y: from.y - inland.y };
+
+  // A lone intersection has no bisector, and is trivially equidistant from itself; head straight
+  // out to sea instead. `dockShapes` never groups more than two, so this is the one-anchor case.
+  const [a, b] = anchors;
+  if (anchors.length !== 2 || a === undefined || b === undefined) {
+    const length = Math.hypot(out.x, out.y) || 1;
+    return { x: from.x + (out.x / length) * reach, y: from.y + (out.y / length) * reach };
+  }
+
+  const chord = Math.hypot(b.x - a.x, b.y - a.y) || 1;
+  // Either normal of the chord is a bisector; take the one pointing away from the land.
+  let nx = -(b.y - a.y) / chord;
+  let ny = (b.x - a.x) / chord;
+  if (out.x * nx + out.y * ny < 0) {
+    nx = -nx;
+    ny = -ny;
+  }
+  return { x: from.x + nx * reach, y: from.y + ny * reach };
 }
 
 // ── Pieces and targets ──────────────────────────────────────────────────────────────────────

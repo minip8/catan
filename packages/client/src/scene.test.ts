@@ -89,6 +89,17 @@ describe('boardScene', () => {
     for (const dock of scene.docks) {
       const middle = midpoint(dock.anchors);
       expect(Math.hypot(dock.at.x - middle.x, dock.at.y - middle.y)).toBeCloseTo(HEX_SIZE * 0.5, 5);
+
+      // …and squarely between its two intersections, since either may trade through it. The
+      // distance above pins how far the badge went; only this pins which way, and a badge pushed
+      // straight out from the land drifts along the chord towards whichever corner touches more
+      // of it.
+      const [a, b] = dock.anchors;
+      if (a === undefined || b === undefined) continue;
+      expect(Math.hypot(dock.at.x - a.x, dock.at.y - a.y)).toBeCloseTo(
+        Math.hypot(dock.at.x - b.x, dock.at.y - b.y),
+        5,
+      );
     }
   });
 

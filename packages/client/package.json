@@ -1,0 +1,19 @@
+{
+  "name": "@catan/client",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Browser client. Renders the board from core's layout helpers and is driven entirely by legalActions.",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "@catan/core": "*"
+  },
+  "devDependencies": {
+    "@types/node": "^22.15.0",
+    "vite": "^7.3.6"
+  }
+}

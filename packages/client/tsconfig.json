@@ -1,0 +1,16 @@
+{
+  "$schema": "https://json.schemastore.org/tsconfig",
+  "//": "Vite compiles this package; tsc only typechecks it, so nothing here is emitted. `moduleResolution: bundler` matches how Vite resolves, which is what lets extensionless relative imports and the `@catan/core` bare specifier mean the same thing to both tools. Only `vite.config.ts` is a Node file — the browser sources never touch Node types.",
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "lib": ["ES2023", "DOM", "DOM.Iterable"],
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "noEmit": true,
+    "composite": false,
+    "declaration": false,
+    "declarationMap": false,
+    "types": ["node"]
+  },
+  "include": ["src/**/*.ts", "vite.config.ts"]
+}

@@ -1,0 +1,497 @@
+/*
+ * One stylesheet, no framework.
+ *
+ * Layout is a two-column grid that collapses to one on narrow screens; the board is an SVG that
+ * scales to its column, so there is no pixel arithmetic outside `scene.ts`. Seat colour arrives as
+ * a custom property (`--seat`) set inline by the panels, which is what lets one rule style a
+ * player row, a chip and a log line in whatever colour that player drew.
+ */
+
+:root {
+  --bg: #14181c;
+  --panel: #1c2228;
+  --panel-edge: #2b343d;
+  --ink: #e8e6e1;
+  --ink-dim: #98a2ab;
+  --accent: #d9a441;
+  --danger: #d4614f;
+  color-scheme: dark;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--ink);
+  font: 15px/1.45 ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif;
+}
+
+button,
+select {
+  font: inherit;
+  color: inherit;
+}
+
+/* ── Header ─────────────────────────────────────────────────────────────────────────────── */
+
+.top {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem 1.5rem;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.75rem 1rem;
+  border-bottom: 1px solid var(--panel-edge);
+  background: var(--panel);
+}
+
+.title-name {
+  margin: 0;
+  font-size: 1.25rem;
+  letter-spacing: 0.04em;
+}
+
+.title-sub {
+  margin: 0;
+  color: var(--ink-dim);
+  font-size: 0.8rem;
+}
+
+.title-warn {
+  margin: 0.15rem 0 0;
+  color: var(--accent);
+  font-size: 0.75rem;
+}
+
+.status {
+  font-weight: 600;
+}
+
+.status-won {
+  color: var(--accent);
+}
+
+.seats {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  align-items: center;
+}
+
+.seats-label {
+  color: var(--ink-dim);
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.chip {
+  padding: 0.3rem 0.6rem;
+  border: 1px solid var(--panel-edge);
+  border-radius: 999px;
+  background: transparent;
+  cursor: pointer;
+}
+
+.chip:hover {
+  border-color: var(--ink-dim);
+}
+
+.chip-seat {
+  border-left: 4px solid var(--seat);
+}
+
+/* The seat you are looking through, whether pinned or reached by following the hot seat. */
+.chip-looking {
+  background: var(--seat);
+  color: var(--ink-color, inherit);
+  border-color: var(--seat);
+}
+
+.chip-on {
+  outline: 2px solid var(--accent);
+}
+
+/* Who the engine is waiting on, which is not always who you are watching. */
+.chip-active::after {
+  content: ' •';
+  color: var(--accent);
+}
+
+/* ── Layout ─────────────────────────────────────────────────────────────────────────────── */
+
+.layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 22rem;
+  gap: 1rem;
+  padding: 1rem;
+  align-items: start;
+}
+
+@media (max-width: 60rem) {
+  .layout {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+.board-wrap {
+  background: #0f1418;
+  border: 1px solid var(--panel-edge);
+  border-radius: 0.6rem;
+  padding: 0.5rem;
+}
+
+.board {
+  display: block;
+  width: 100%;
+  max-height: 78vh;
+}
+
+.side {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  min-width: 0;
+}
+
+.panel {
+  background: var(--panel);
+  border: 1px solid var(--panel-edge);
+  border-radius: 0.6rem;
+  padding: 0.75rem;
+}
+
+.panel-title {
+  margin: 0 0 0.5rem;
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  color: var(--ink-dim);
+}
+
+.sub {
+  margin: 0.6rem 0 0.3rem;
+  font-size: 0.78rem;
+  color: var(--ink-dim);
+  font-weight: 600;
+}
+
+.muted {
+  color: var(--ink-dim);
+  margin: 0;
+}
+
+.notice {
+  margin: 0 0 0.5rem;
+  padding: 0.4rem 0.5rem;
+  border-left: 3px solid var(--danger);
+  background: rgb(212 97 79 / 12%);
+  font-size: 0.85rem;
+}
+
+/* ── Board ──────────────────────────────────────────────────────────────────────────────── */
+
+.hex {
+  stroke: #0f1418;
+  stroke-width: 1.5;
+}
+
+.hex-blocked {
+  filter: saturate(0.45) brightness(0.7);
+}
+
+.hex-label {
+  fill: rgb(0 0 0 / 45%);
+  font-size: 11px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  pointer-events: none;
+}
+
+.token-face {
+  fill: #efe6d2;
+  stroke: rgb(0 0 0 / 35%);
+}
+
+.token-value {
+  fill: #23201c;
+  font-size: 17px;
+  font-weight: 700;
+  pointer-events: none;
+}
+
+.token-hot .token-value,
+.token-hot .pip {
+  fill: #b4342a;
+}
+
+.pip {
+  fill: #23201c;
+}
+
+.dock-line {
+  stroke: #d8cfae;
+  stroke-width: 2.5;
+  stroke-linecap: round;
+  opacity: 0.65;
+}
+
+.dock-face {
+  stroke: rgb(0 0 0 / 40%);
+}
+
+.dock-ratio {
+  font-size: 13px;
+  font-weight: 700;
+  fill: #16181a;
+  pointer-events: none;
+}
+
+.dock-kind {
+  font-size: 9px;
+  fill: #16181a;
+  pointer-events: none;
+  text-transform: uppercase;
+}
+
+.piece .building,
+.piece .road {
+  stroke: rgb(0 0 0 / 55%);
+  stroke-width: 1.5;
+}
+
+.piece .robber {
+  stroke: #efe6d2;
+  stroke-width: 2;
+}
+
+/* Live spots. Faint until hovered, so a board with forty legal roads stays readable. */
+.target {
+  cursor: pointer;
+}
+
+.target-vertex,
+.target-hex,
+.target-edge {
+  fill: var(--accent);
+  fill-opacity: 0.35;
+  stroke: var(--accent);
+  stroke-width: 2;
+  transition: fill-opacity 120ms ease;
+}
+
+.target:hover .target-vertex,
+.target:hover .target-hex,
+.target:hover .target-edge,
+.target:focus-visible .target-vertex,
+.target:focus-visible .target-hex,
+.target:focus-visible .target-edge {
+  fill-opacity: 0.75;
+}
+
+/* ── Players, hand, bank ────────────────────────────────────────────────────────────────── */
+
+.players {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+
+.player {
+  border-left: 4px solid var(--seat);
+  padding: 0.35rem 0.5rem;
+  border-radius: 0.3rem;
+  background: rgb(255 255 255 / 3%);
+}
+
+.player-active {
+  background: rgb(217 164 65 / 12%);
+}
+
+.player-head {
+  display: flex;
+  justify-content: space-between;
+  font-weight: 600;
+}
+
+.player-stats,
+.player-supply {
+  font-size: 0.75rem;
+  color: var(--ink-dim);
+}
+
+.chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+}
+
+.card-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.15rem 0.45rem;
+  border-radius: 0.3rem;
+  border-left: 4px solid var(--card);
+  background: rgb(255 255 255 / 5%);
+  font-size: 0.8rem;
+}
+
+.card-count {
+  font-weight: 700;
+}
+
+.devs {
+  list-style: none;
+  margin: 0.4rem 0 0;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.3rem;
+}
+
+.dev {
+  padding: 0.15rem 0.45rem;
+  border: 1px solid var(--panel-edge);
+  border-radius: 0.3rem;
+  font-size: 0.8rem;
+}
+
+.dev-hidden {
+  color: var(--ink-dim);
+  font-style: italic;
+}
+
+.dev-revealed {
+  border-color: var(--accent);
+}
+
+.decks {
+  margin-top: 0.4rem;
+  font-size: 0.75rem;
+  color: var(--ink-dim);
+}
+
+/* ── Actions ────────────────────────────────────────────────────────────────────────────── */
+
+.group + .group {
+  border-top: 1px solid var(--panel-edge);
+}
+
+.btns {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.3rem;
+}
+
+.btn {
+  padding: 0.35rem 0.6rem;
+  border: 1px solid var(--panel-edge);
+  border-radius: 0.35rem;
+  background: rgb(255 255 255 / 4%);
+  cursor: pointer;
+}
+
+.btn:hover:not(:disabled) {
+  border-color: var(--accent);
+}
+
+.btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.btn-on {
+  border-color: var(--accent);
+  background: rgb(217 164 65 / 18%);
+}
+
+.btn-go {
+  border-color: var(--accent);
+  font-weight: 600;
+}
+
+.stepper-row {
+  margin-bottom: 0.4rem;
+}
+
+.steppers {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.3rem;
+}
+
+.stepper {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  padding: 0.25rem 0.35rem;
+  border-radius: 0.3rem;
+  border-left: 4px solid var(--card);
+  background: rgb(255 255 255 / 5%);
+  font-size: 0.75rem;
+}
+
+.stepper-controls {
+  display: flex;
+  align-items: center;
+  gap: 0.3rem;
+}
+
+.stepper-value {
+  min-width: 1.1rem;
+  text-align: center;
+  font-weight: 700;
+}
+
+.step {
+  width: 1.4rem;
+  height: 1.4rem;
+  border: 1px solid var(--panel-edge);
+  border-radius: 0.25rem;
+  background: transparent;
+  cursor: pointer;
+  line-height: 1;
+}
+
+.draft-head {
+  margin: 0 0 0.4rem;
+  font-size: 0.85rem;
+}
+
+/* ── Log ────────────────────────────────────────────────────────────────────────────────── */
+
+.log {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  max-height: 16rem;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  font-size: 0.8rem;
+}
+
+.log-line {
+  padding-left: 0.5rem;
+  border-left: 3px solid var(--seat, transparent);
+  color: var(--ink-dim);
+}
+
+.log-victory,
+.log-award {
+  color: var(--accent);
+  font-weight: 600;
+}
+
+.log-steal,
+.log-robber {
+  color: var(--ink);
+}

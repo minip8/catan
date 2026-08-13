@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import { newBaseGame, P } from '../game.testkit.js';
 import { replay } from './replay.js';
-import { Session } from './session.js';
+import { restoreSession, Session } from './session.js';
 
 const [p0, p1] = P as [(typeof P)[0], (typeof P)[1]];
 
@@ -46,5 +46,65 @@ describe('Session', () => {
 
     expect(session.record.actions.length).toBeGreaterThan(8);
     expect(replay(session.record).state).toEqual(session.state);
+  });
+});
+
+describe('restoreSession', () => {
+  function played(actions: number): Session {
+    const session = new Session(newBaseGame(5));
+    for (let i = 0; i < actions; i++) {
+      const step = session.state.stack.at(-1);
+      const actor = ([step?.actor].flat()[0] ?? p0) as typeof p0;
+      // The first option of the first spec is not always there — a trade offer is advertised
+      // with an empty option list — so take the first action anything offers.
+      const action = session.options(actor).flatMap((spec) => spec.options)[0];
+      if (action === undefined) break;
+      const result = session.act(actor, action);
+      if (!result.ok) throw new Error(result.error.message);
+    }
+    return session;
+  }
+
+  it('comes back holding the same state and the same history', () => {
+    const original = played(24);
+    const restored = restoreSession(original.record);
+
+    expect(restored.state).toEqual(original.state);
+    expect(restored.record).toEqual(original.record);
+  });
+
+  it('keeps appending to the log it was given, not starting a new one', () => {
+    const original = played(24);
+    const restored = restoreSession(original.record);
+
+    const step = restored.state.stack.at(-1);
+    const actor = ([step?.actor].flat()[0] ?? p0) as typeof p0;
+    const action = restored.options(actor).flatMap((spec) => spec.options)[0];
+    if (action === undefined) throw new Error('nothing to play');
+    const result = restored.act(actor, action);
+    if (!result.ok) throw new Error(result.error.message);
+
+    expect(restored.record.actions).toHaveLength(original.record.actions.length + 1);
+    // The record is still a complete replay of the whole game, not just of what happened after
+    // the restore — which is the point of restoring it this way.
+    expect(replay(restored.record).state).toEqual(restored.state);
+  });
+
+  it('cuts the record to what it actually replayed', () => {
+    const original = played(24);
+    const half = Math.floor(original.record.actions.length / 2);
+    const partial = restoreSession(original.record, { upTo: half });
+
+    expect(partial.record.actions).toHaveLength(half);
+    expect(replay(partial.record).state).toEqual(partial.state);
+  });
+
+  it('refuses a record from a different game', () => {
+    const mine = new Session(newBaseGame(5));
+    const theirs = new Session(newBaseGame(6));
+    expect(() => new Session(newBaseGame(5), { record: theirs.record })).toThrow(
+      /does not belong to this game/,
+    );
+    expect(() => new Session(newBaseGame(5), { record: mine.record })).not.toThrow();
   });
 });

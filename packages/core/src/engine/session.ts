@@ -24,7 +24,7 @@ import type { GameState } from '../state/gameState.js';
 import type { InvariantContext } from '../state/invariants.js';
 import { invariantsFor, type NewGame } from './newGame.js';
 import { legalActions, reduce } from './reduce.js';
-import { type GameRecord, newRecord, record } from './replay.js';
+import { type GameRecord, newRecord, type ReplayOptions, record, replay } from './replay.js';
 import { type PlayerView, redactFor } from './view.js';
 
 /** What one viewer is told about an accepted action. */
@@ -44,6 +44,14 @@ export interface SessionOptions {
    * game into a loud failure at the action that caused it.
    */
   readonly checkInvariants?: boolean;
+  /**
+   * Continue an existing record rather than starting an empty one.
+   *
+   * Needed by anything that rebuilds a game from its log — a server restarting, a room recovering
+   * after a crash. Without it a restored session would hold a state produced by ninety actions and
+   * a record claiming none, and the next save would truncate the game's history to one move.
+   */
+  readonly record?: GameRecord;
 }
 
 export class Session {
@@ -56,7 +64,8 @@ export class Session {
   constructor(game: NewGame, options: SessionOptions = {}) {
     this.ctx = game.ctx;
     this.current = game.state;
-    this.log = newRecord(game.state);
+    this.log =
+      options.record === undefined ? newRecord(game.state) : adopt(game.state, options.record);
     this.invariants =
       options.checkInvariants === true ? invariantsFor(game.ctx, game.state) : undefined;
   }
@@ -115,4 +124,51 @@ export class Session {
       events: redactEvents(events, viewer),
     }));
   }
+}
+
+export interface RestoreOptions extends SessionOptions, ReplayOptions {}
+
+/**
+ * Rebuild a session from its record.
+ *
+ * This is the whole of a server's crash recovery, and the reason `replay` was worth building: a
+ * room is restored by replaying the decisions its players made, not by deserialising a state whose
+ * shape will change as expansions land. The session it returns continues the same record, so the
+ * next action appends rather than starting a second history.
+ */
+export function restoreSession(saved: GameRecord, options: RestoreOptions = {}): Session {
+  const rebuilt = replay(saved, options);
+  // With `upTo`, the record must be cut to what was actually applied — otherwise the session would
+  // claim actions its state has never seen.
+  const record: GameRecord =
+    rebuilt.applied === saved.actions.length
+      ? saved
+      : { ...saved, actions: saved.actions.slice(0, rebuilt.applied) };
+  return new Session(
+    rebuilt,
+    options.checkInvariants === true ? { checkInvariants: true, record } : { record },
+  );
+}
+
+/**
+ * Take on a record, refusing one that belongs to a different game.
+ *
+ * Cheap to check and expensive to get wrong: a session holding someone else's log would save that
+ * log over its own, and the mistake would only surface when the replay dealt a different island.
+ */
+function adopt(state: GameState, saved: GameRecord): GameRecord {
+  const mine = newRecord(state);
+  const mismatched =
+    saved.seed !== mine.seed ||
+    saved.scenarioId !== mine.scenarioId ||
+    saved.ruleSetId !== mine.ruleSetId ||
+    saved.seatOrder.length !== mine.seatOrder.length ||
+    saved.seatOrder.some((id, i) => id !== mine.seatOrder[i]);
+  if (mismatched) {
+    throw new Error(
+      `Session: the supplied record (${saved.scenarioId} seed ${saved.seed}) does not belong to ` +
+        `this game (${mine.scenarioId} seed ${mine.seed})`,
+    );
+  }
+  return saved;
 }

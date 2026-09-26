@@ -53,6 +53,7 @@ an action's field names.
 | `scene.ts` | the board as pure data, positioned by core's layout helpers |
 | `board.ts` | scene → SVG, and the `<defs>` every tile and piece draws its depth from |
 | `narrate.ts` | events → log lines, actions → button labels |
+| `sound.ts` | events → cues for this seat, and a Web Audio synth that plays them |
 | `panels.ts` | scoreboard, hand, bank, action bar, log, composer forms |
 | `styles.css` | the only stylesheet; `--seat`, `--card` and `--ink-color` are the bridge from the panels |
 | `table.ts` | the seam: `Snapshot`, `Table`, and the hot-seat implementation |

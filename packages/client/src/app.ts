@@ -18,6 +18,7 @@
 
 import {
   type Action,
+  type GameEvent,
   type GameState,
   type LocusId,
   type PlayerId,
@@ -45,6 +46,7 @@ import {
   youPanel,
 } from './panels.js';
 import { boardScene } from './scene.js';
+import { cuesFor, sounds } from './sound.js';
 import type { Table } from './table.js';
 import {
   affordances,
@@ -95,6 +97,8 @@ export class App {
   private pop: LocusId | null = null;
   /** Where the player could buy something this render, for the board's clicks to look up. */
   private spots: readonly PurchaseSpot[] = [];
+  /** How much of the log has been heard. `-1` until the first render, which plays nothing. */
+  private heard = -1;
 
   constructor(root: HTMLElement, table: Table, on: AppHandlers) {
     this.root = root;
@@ -121,6 +125,7 @@ export class App {
     const snap = this.table.snapshot(seat);
     const actors = actorsOf(snap.view);
     const affs = affordances(this.table.ctx, snap.options);
+    this.listen(snap.events, snap.viewer);
 
     if (snap.at !== this.at) {
       this.at = snap.at;
@@ -225,6 +230,17 @@ export class App {
     );
   }
 
+  /**
+   * Sound whatever has happened since the last render. The first render only catches up — a
+   * reload should not replay the whole game — and a shorter log (another seat's) starts afresh.
+   */
+  private listen(events: readonly GameEvent[], viewer: PlayerId | null): void {
+    if (this.heard >= 0 && events.length > this.heard) {
+      sounds.playAll(cuesFor(events.slice(this.heard), viewer));
+    }
+    this.heard = events.length;
+  }
+
   // ── Board and zoom ────────────────────────────────────────────────────────────────────────
 
   private board(
@@ -300,6 +316,10 @@ export class App {
           children: ['⚙'],
         }),
         gameMenu(ui, on),
+        control(sounds.muted ? '🔇' : '🔊', sounds.muted ? 'Turn sound on' : 'Mute', false, () => {
+          sounds.muted = !sounds.muted;
+          this.render();
+        }),
         control('+', 'Zoom in', this.zoom.scale >= MAX_SCALE, () => step(1.5)),
         control('−', 'Zoom out', this.zoom.scale <= MIN_SCALE, () => step(1 / 1.5)),
         control('⤢', 'Show the whole board', this.zoom === WHOLE, () => {

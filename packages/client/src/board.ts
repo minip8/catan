@@ -35,7 +35,7 @@ export interface BoardHandlers {
 }
 
 export function boardSvg(scene: Scene, handlers: BoardHandlers): SVGElement {
-  const [x = 0, y = 0, width = 0, height = 0] = scene.viewBox.split(' ').map(Number);
+  const land = scene.hexes.filter((hex) => hex.class !== 'sea');
   return s('svg', {
     attrs: {
       class: 'board',
@@ -46,32 +46,21 @@ export function boardSvg(scene: Scene, handlers: BoardHandlers): SVGElement {
     },
     children: [
       defs(),
-      // The page is the ocean; this only brightens the shallows under the island and lays a few
-      // ripples, fading to nothing at the edge so the board has no visible frame. Sea hexes still
-      // draw (the topology is what says where the coast is) but all but vanish into it.
-      s('rect', { attrs: { class: 'sea', x, y, width, height, fill: 'url(#b-sea)' } }),
-      // Ripples run well past the board, because a dragged board shows what lies beyond it.
-      s('rect', {
-        attrs: {
-          class: 'sea-ripple',
-          x: x - width * 2,
-          y: y - height * 2,
-          width: width * 5,
-          height: height * 5,
-          fill: 'url(#b-ripple)',
-        },
-      }),
-      // The beach: every land tile's outline, stroked wide in sand beneath the tiles, so the island
-      // gets a coastline and the tiles a seam without any geometry of its own.
+      // The page is the ocean. The island's edge is two strokes of every land tile's outline laid
+      // under the tiles — pale shallows, then the sand — so the coast has a beach and a lighter
+      // band of water round it, and the tiles get a sandy seam, with no geometry of their own.
       s('g', {
         attrs: { class: 'shore' },
-        children: scene.hexes
-          .filter((hex) => hex.class !== 'sea')
-          .map((hex) =>
+        children: [
+          ...land.map((hex) =>
+            s('polygon', { attrs: { class: 'shore-shallows', points: outlineOf(hex) } }),
+          ),
+          ...land.map((hex) =>
             s('polygon', {
               attrs: { class: 'shore-sand', points: outlineOf(hex), fill: SAND_FILL },
             }),
           ),
+        ],
       }),
       s('g', {
         attrs: { class: 'hexes' },
@@ -96,7 +85,7 @@ export function boardSvg(scene: Scene, handlers: BoardHandlers): SVGElement {
 // ── Paint ───────────────────────────────────────────────────────────────────────────────────
 
 /**
- * The four pieces of paint the board reuses. Ids are prefixed `b-` because they land in the
+ * The pieces of paint the board reuses. Ids are prefixed `b-` because they land in the
  * document's global id space, which the panels also live in.
  */
 function defs(): SVGElement {
@@ -126,23 +115,6 @@ function defs(): SVGElement {
           speck(10.2, 6.8, 0.9, '#000000', '0.06'),
           speck(6.1, 11.4, 1.0, '#ffffff', '0.035'),
           speck(12.6, 1.4, 0.7, '#000000', '0.05'),
-        ],
-      }),
-      // Shallows: lighter water round the island, clear by the rim so the page's sea shows through.
-      s('radialGradient', {
-        attrs: { id: 'b-sea', cx: '0.5', cy: '0.5', r: '0.6' },
-        children: [
-          stop('0', '#8fd0f2', '0.55'),
-          stop('0.7', '#6bbbe8', '0.22'),
-          stop('1', '#3b8fd0', '0'),
-        ],
-      }),
-      // Ripples: two short arcs in a staggered tile. Pattern, not filter, like the grain.
-      s('pattern', {
-        attrs: { id: 'b-ripple', width: 64, height: 40, patternUnits: 'userSpaceOnUse' },
-        children: [
-          ripple('M 6 12 q 5 -4 10 0 q 5 4 10 0'),
-          ripple('M 38 32 q 5 -4 10 0 q 5 4 10 0'),
         ],
       }),
       // Pieces stand taller than anything printed on the board, so they cast a longer shadow.
@@ -185,19 +157,6 @@ function stop(offset: string, color: string, opacity: string): SVGElement {
   });
 }
 
-function ripple(d: string): SVGElement {
-  return s('path', {
-    attrs: {
-      d,
-      fill: 'none',
-      stroke: '#ffffff',
-      'stroke-opacity': 0.16,
-      'stroke-width': 1.6,
-      'stroke-linecap': 'round',
-    },
-  });
-}
-
 function speck(cx: number, cy: number, r: number, fill: string, opacity: string): SVGElement {
   return s('circle', { attrs: { cx, cy, r, fill, 'fill-opacity': opacity } });
 }
@@ -209,16 +168,13 @@ function outlineOf(hex: HexShape): string {
 }
 
 /**
- * Where a terrain's glyphs stand, as fractions of the hex size: a loose ring round the token, each
- * with its own scale so the tile looks planted rather than tiled.
+ * Where a terrain's glyph stands, as fractions of the hex size: one large emblem above the token,
+ * flanked by two small tufts, the way a printed tile carries one picture rather than a pattern.
  */
-const ART_SLOTS: readonly (readonly [number, number, number])[] = [
-  [-0.03, -0.6, 0.95],
-  [-0.5, -0.24, 0.8],
-  [0.48, -0.3, 0.85],
-  [-0.42, 0.38, 0.85],
-  [0.44, 0.34, 0.8],
-  [0.02, 0.62, 0.75],
+const ART_SLOTS: readonly (readonly [number, number, number])[] = [[0, -0.44, 1.5]];
+const TUFTS: readonly (readonly [number, number])[] = [
+  [-0.5, -0.12],
+  [0.52, 0.05],
 ];
 
 function hexGroup(hex: HexShape, size: number): SVGElement {
@@ -268,7 +224,8 @@ function hexGroup(hex: HexShape, size: number): SVGElement {
     // Spread multiple tokens along the hex's width. The base game never has more than one, but a
     // Traders & Barbarians lake carries four and would otherwise stack them on one spot.
     const spread = hex.tokens.length === 1 ? 0 : (index - (hex.tokens.length - 1) / 2) * size * 0.6;
-    children.push(tokenGroup(hex.center.x + spread, hex.center.y, size, token));
+    // Below the middle, under the terrain's emblem.
+    children.push(tokenGroup(hex.center.x + spread, hex.center.y + size * 0.16, size, token));
   });
 
   // The robber itself is a piece and is drawn in the pieces layer; `blocked` only dims the hex,
@@ -281,37 +238,57 @@ function terrainArt(hex: HexShape, size: number): SVGElement | null {
   const terrain = hex.terrain;
   if (terrain === null || glyph(terrain) === null) return null;
   const unit = size / 24;
+  const at = (dx: number, dy: number): string =>
+    `${(hex.center.x + dx * size).toFixed(1)} ${(hex.center.y + dy * size).toFixed(1)}`;
   return s('g', {
     attrs: { class: 'hex-art' },
-    children: ART_SLOTS.map(([dx, dy, scale]) =>
-      s('g', {
-        attrs: {
-          transform: `translate(${(hex.center.x + dx * size).toFixed(1)} ${(hex.center.y + dy * size).toFixed(1)}) scale(${(unit * scale * 0.72).toFixed(3)})`,
-        },
-        children: glyph(terrain) ?? [],
-      }),
-    ),
+    children: [
+      ...TUFTS.map(([dx, dy]) =>
+        s('path', {
+          attrs: {
+            class: 'hex-tuft',
+            transform: `translate(${at(dx, dy)})`,
+            d: 'M -5 3 Q -4 -2 -6 -5 M -1 3 Q 0 -3 -1 -7 M 3 3 Q 3 -2 5 -5',
+          },
+        }),
+      ),
+      ...ART_SLOTS.map(([dx, dy, scale]) =>
+        s('g', {
+          attrs: {
+            transform: `translate(${at(dx, dy)}) scale(${(unit * scale * 0.72).toFixed(3)})`,
+          },
+          children: glyph(terrain) ?? [],
+        }),
+      ),
+    ],
   });
 }
 
+/** A printed number tile: a rounded cream square, the number, and its odds as dots beneath. */
 function tokenGroup(x: number, y: number, size: number, token: Token): SVGElement {
-  const radius = size * 0.3;
+  const half = size * 0.3;
   const pips = Array.from({ length: token.pips }, (_, i) => {
-    const spacing = radius * 0.24;
+    const spacing = half * 0.26;
     const offset = (i - (token.pips - 1) / 2) * spacing;
     return s('circle', {
-      attrs: { cx: x + offset, cy: y + radius * 0.52, r: radius * 0.075, class: 'pip' },
+      attrs: { cx: x + offset, cy: y + half * 0.62, r: half * 0.085, class: 'pip' },
     });
   });
   return s('g', {
     attrs: { class: `token${token.hot ? ' token-hot' : ''}` },
     children: [
-      s('circle', { attrs: { cx: x, cy: y, r: radius, class: 'token-face' } }),
-      // An inset ring, the way a printed token is bordered. Red on a 6 or an 8, so the two hot
-      // numbers are findable by shape as well as by colour.
-      s('circle', { attrs: { cx: x, cy: y, r: radius * 0.84, class: 'token-ring' } }),
+      s('rect', {
+        attrs: {
+          x: x - half,
+          y: y - half,
+          width: half * 2,
+          height: half * 2,
+          rx: half * 0.3,
+          class: 'token-face',
+        },
+      }),
       s('text', {
-        attrs: { x, y: y + radius * 0.12, 'text-anchor': 'middle', class: 'token-value' },
+        attrs: { x, y: y + half * 0.3, 'text-anchor': 'middle', class: 'token-value' },
         children: [token.value],
       }),
       ...pips,
@@ -322,7 +299,8 @@ function tokenGroup(x: number, y: number, size: number, token: Token): SVGElemen
 // ── Harbours ────────────────────────────────────────────────────────────────────────────────
 
 function dockGroup(dock: DockShape, size: number): SVGElement[] {
-  // Each mooring is a plank on a darker shadow, which keeps a thin line legible over bright water.
+  // Each mooring is a jetty: a dark stringer under a run of pale planks, drawn as one dashed
+  // stroke so the boards run crosswise however the jetty is angled.
   const out: SVGElement[] = dock.anchors.flatMap((anchor) => {
     const ends = { x1: anchor.x, y1: anchor.y, x2: dock.at.x, y2: dock.at.y };
     return [
@@ -331,62 +309,64 @@ function dockGroup(dock: DockShape, size: number): SVGElement[] {
     ];
   });
 
-  // The badge: a disc in the harbour's resource with its glyph, and the ratio on a pill across
-  // the bottom. A generic harbour is a pale disc with a question mark — any card will do.
-  const r = size * 0.27;
+  // The harbour is a ship: a hull, a mast, and a sail carrying the trade — the resource's glyph
+  // over its ratio, or a question mark for a harbour that takes any card.
   const style = dock.kind === null ? null : cardStyle(dock.kind);
   const name = style === null ? 'any' : style.label;
   const art = dock.kind === null ? null : glyph(dock.kind);
-  const pill = { w: size * 0.46, h: size * 0.22 };
+  const k = (size / 60) * 1.35;
+  const { x, y } = dock.at;
+  const p = (pairs: readonly (readonly [number, number])[]): string =>
+    pairs.map(([px, py]) => `${(x + px * k).toFixed(1)},${(y + py * k).toFixed(1)}`).join(' ');
 
   out.push(
     s('g', {
       attrs: { class: 'dock' },
       children: [
         s('title', { children: [`${dock.label} harbour — ${name}`] }),
-        s('circle', {
+        s('line', {
+          attrs: { class: 'dock-mast', x1: x, y1: y - 22 * k, x2: x, y2: y + 12 * k },
+        }),
+        s('polygon', {
           attrs: {
-            cx: dock.at.x,
-            cy: dock.at.y,
-            r,
+            class: 'dock-flag',
+            points: p([
+              [0, -22],
+              [10, -20],
+              [0, -18],
+            ]),
+          },
+        }),
+        s('path', {
+          attrs: {
+            class: 'dock-hull',
+            d: `M ${p([[-17, 10]])} L ${p([[17, 10]])} Q ${p([[15, 20]])} ${p([[8, 21]])} L ${p([[-8, 21]])} Q ${p([[-15, 20]])} ${p([[-17, 10]])} Z`,
+          },
+        }),
+        s('rect', {
+          attrs: {
             class: 'dock-face',
-            fill: style?.color ?? '#fbf7ec',
+            x: x - 13 * k,
+            y: y - 18 * k,
+            width: 26 * k,
+            height: 27 * k,
+            rx: 5 * k,
           },
         }),
         art === null
           ? s('text', {
-              attrs: {
-                x: dock.at.x,
-                y: dock.at.y - r * 0.12,
-                'text-anchor': 'middle',
-                class: 'dock-kind',
-              },
-              children: [dock.kind === null ? '?' : name],
+              attrs: { x, y: y - 3 * k, 'text-anchor': 'middle', class: 'dock-kind' },
+              children: [dock.kind === null ? '?' : name.charAt(0)],
             })
           : s('g', {
               attrs: {
                 class: 'dock-art',
-                transform: `translate(${dock.at.x.toFixed(1)} ${(dock.at.y - r * 0.18).toFixed(1)}) scale(${((r * 1.2) / 24).toFixed(3)})`,
+                transform: `translate(${x.toFixed(1)} ${(y - 8 * k).toFixed(1)}) scale(${(0.62 * k).toFixed(3)})`,
               },
               children: art,
             }),
-        s('rect', {
-          attrs: {
-            x: dock.at.x - pill.w / 2,
-            y: dock.at.y + r * 0.42,
-            width: pill.w,
-            height: pill.h,
-            rx: pill.h / 2,
-            class: 'dock-pill',
-          },
-        }),
         s('text', {
-          attrs: {
-            x: dock.at.x,
-            y: dock.at.y + r * 0.42 + pill.h * 0.76,
-            'text-anchor': 'middle',
-            class: 'dock-ratio',
-          },
+          attrs: { x, y: y + 6.5 * k, 'text-anchor': 'middle', class: 'dock-ratio' },
           children: [dock.label],
         }),
       ],

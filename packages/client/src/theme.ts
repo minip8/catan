@@ -63,17 +63,17 @@ export interface TerrainStyle {
 const TERRAIN: Readonly<Record<string, TerrainStyle>> = {
   hills: { label: 'Hills', fill: '#d9703a' },
   forest: { label: 'Forest', fill: '#3f8a3c' },
-  mountains: { label: 'Mountains', fill: '#9aa6b2' },
+  mountains: { label: 'Mountains', fill: '#aab0b6' },
   fields: { label: 'Fields', fill: '#f2c53d' },
   pasture: { label: 'Pasture', fill: '#9fd158' },
-  desert: { label: 'Desert', fill: '#ecd9a0' },
+  desert: { label: 'Desert', fill: '#e3d49f' },
 };
 
 /** The water. The page itself is this sea; `board.ts` only brightens it under the island. */
-export const SEA_FILL = '#3b8fd0';
+export const SEA_FILL = '#2c61a3';
 
 /** The beach round the island and the seams between tiles. */
-export const SAND_FILL = '#f0dfae';
+export const SAND_FILL = '#ebd39a';
 
 export function terrainStyle(terrain: TerrainId | null): TerrainStyle {
   if (terrain === null) return { label: 'Unknown', fill: '#4a4a4a' };

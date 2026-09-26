@@ -368,6 +368,12 @@ export const mainHandler: StepHandler = {
     ];
   },
 
+  // Every build the board allows, paid for or not, so a UI can price a spot before the player
+  // can afford it.
+  prospects(ctx, state, _step, actor) {
+    return buildSpecs(ctx, state, actor, { ignoreCost: true });
+  },
+
   apply(ctx, tx, _step, actor, action): Result<void, RuleViolation> {
     switch (action.type) {
       case ACTION.build:
@@ -390,15 +396,24 @@ export const mainHandler: StepHandler = {
   },
 };
 
-/** Build options for every buildable piece kind the player can currently afford and place. */
-function buildSpecs(ctx: RuleContext, state: GameState, actor: PlayerId): readonly ActionSpec[] {
+/**
+ * Build options for every buildable piece kind the player can place — and, unless `ignoreCost`,
+ * afford. Running out of a piece still rules it out: that is not a price, it is the box being
+ * empty.
+ */
+function buildSpecs(
+  ctx: RuleContext,
+  state: GameState,
+  actor: PlayerId,
+  { ignoreCost = false }: { readonly ignoreCost?: boolean } = {},
+): readonly ActionSpec[] {
   const player = state.players[actor];
   if (player === undefined) return [];
 
   const out: ActionSpec[] = [];
   for (const meta of Object.values(ctx.rules.pieceKinds)) {
     if (!meta.owned || meta.cost === undefined) continue;
-    if (!canAfford(player, meta.cost)) continue;
+    if (!ignoreCost && !canAfford(player, meta.cost)) continue;
     if (meta.limit !== null && (player.supply[meta.id] ?? 0) <= 0) continue;
 
     // An upgrade's targets are the owner's own pieces of the source kind, which `placementOptions`

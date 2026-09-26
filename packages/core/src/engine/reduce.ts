@@ -193,3 +193,21 @@ export function legalActions(
   if (step === undefined || !stepBelongsTo(step, actor)) return [];
   return ctx.rules.steps[step.kind]?.actions?.(ctx, state, step, actor) ?? [];
 }
+
+/**
+ * What `actor` could do now but for the cost — see `StepHandler.prospects`. Empty when it is not
+ * their step, or the step has nothing to buy.
+ *
+ * Reads only public state for the base game (where a piece may go depends on the board, not on
+ * anyone's hand), so it is safe to run on a redacted view as well as on the full state.
+ */
+export function prospects(
+  ctx: RuleContext,
+  state: GameState,
+  actor: PlayerId,
+): readonly ActionSpec[] {
+  if (state.outcome !== null) return [];
+  const step = currentStep(state);
+  if (step === undefined || !stepBelongsTo(step, actor)) return [];
+  return ctx.rules.steps[step.kind]?.prospects?.(ctx, state, step, actor) ?? [];
+}

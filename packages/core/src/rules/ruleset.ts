@@ -208,6 +208,20 @@ export interface StepHandler {
     step: Step,
     actor: PlayerId,
   ) => readonly ActionSpec[];
+  /**
+   * What the step would let `actor` do if they could pay for it: the same descriptors as
+   * `actions`, but ignoring cost. A superset of the affordable part of `actions`.
+   *
+   * For UIs that show a purchase before the player can afford it — a price on a spot the player is
+   * hovering — so they need not re-derive where a piece could go. Like `actions`, never consulted
+   * by the reducer: an unaffordable prospect sent as an action is refused by `apply` as usual.
+   */
+  readonly prospects?: (
+    ctx: RuleContext,
+    state: GameState,
+    step: Step,
+    actor: PlayerId,
+  ) => readonly ActionSpec[];
   /** Validate and apply. The authority: if this returns `Ok`, the action was legal. */
   readonly apply?: (
     ctx: RuleContext,

@@ -9,7 +9,7 @@
 import { describe, expect, it } from 'vitest';
 
 import { edgeEndpoints, vertexEdges } from '../../coords/edge.js';
-import { legalActions } from '../../engine/reduce.js';
+import { legalActions, prospects } from '../../engine/reduce.js';
 import {
   act,
   advanceToMain,
@@ -171,6 +171,29 @@ describe('building', () => {
     const { state, at } = reachable(inMain());
     act(game.ctx, grant(state, p0, SETTLEMENT_COST), p0, { type: 'build', kind: 'settlement', at });
     refuse(game.ctx, state, p0, { type: 'build', kind: 'settlement', at }, 'cannotAfford');
+  });
+
+  it('prices a placement as a prospect before the player can afford it', () => {
+    const { state, at } = reachable(inMain());
+    const settlementAt = (specs: ReturnType<typeof prospects>): boolean =>
+      specs.some((s) => s.options.some((o) => o.kind === 'settlement' && o.at === at));
+
+    // Unaffordable: not an offer, but still a prospect — and the reducer still refuses it.
+    const poor = {
+      ...state,
+      players: { ...state.players, [p0]: { ...state.players[p0], cards: {} } },
+    };
+    expect(settlementAt(legalActions(game.ctx, poor as GameState, p0))).toBe(false);
+    expect(settlementAt(prospects(game.ctx, poor as GameState, p0))).toBe(true);
+
+    // Affordable: an offer and a prospect alike.
+    const rich = grant(state, p0, SETTLEMENT_COST);
+    expect(settlementAt(legalActions(game.ctx, rich, p0))).toBe(true);
+    expect(settlementAt(prospects(game.ctx, rich, p0))).toBe(true);
+
+    // Nobody else's turn has prospects.
+    const other = Object.keys(state.players).find((p) => p !== p0);
+    expect(prospects(game.ctx, state, other as typeof p0)).toEqual([]);
   });
 
   it('upgrades a settlement to a city, returning the settlement to supply', () => {

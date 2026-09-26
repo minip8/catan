@@ -313,23 +313,123 @@ select {
   cursor: default;
 }
 
-/* Hand on the left, actions on the right, as on most online tables. DOM order stays actions-first. */
+/* Hand on the left, the turn dock on the right. DOM order stays dock-first. The hud never grows:
+   the menu and the trade tray open over the board instead of pushing it. */
 .hud {
   display: grid;
-  grid-template-columns: minmax(0, 1.35fr) minmax(0, 1fr);
+  grid-template-columns: minmax(0, 1fr) minmax(17rem, 25rem);
   gap: 0.75rem;
   align-items: end;
 }
 
-/* A trade composer is tall; past this it scrolls rather than squeezing the board away. */
-.hud .panel {
-  max-height: 42vh;
-  overflow-y: auto;
-  scrollbar-width: thin;
-}
-
 .hud .panel-hand {
   order: -1;
+}
+
+.turn-dock {
+  position: relative;
+  min-width: 0;
+}
+
+.turn-bar {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.75rem 0.85rem;
+  border-radius: var(--r-lg);
+  background: var(--panel);
+  box-shadow: var(--lift-2);
+}
+
+.turn-prompt {
+  flex: 1;
+  min-width: 0;
+}
+
+.turn-prompt > p {
+  margin: 0;
+}
+
+.turn-say {
+  font-weight: 800;
+}
+
+.turn-prompt .turn-hint {
+  margin-top: 0.2rem;
+  font-size: 0.82rem;
+  color: var(--ink-dim);
+}
+
+.turn-prompt .notice {
+  margin-top: 0.4rem;
+}
+
+.link {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--primary);
+  font-weight: 700;
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+/* The menu toggle: the one big button on the table. */
+.btn-menu {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  padding: 0.65rem 1.1rem 0.7rem;
+  background: var(--primary);
+  color: #fff;
+  font-size: 1rem;
+  box-shadow:
+    0 0 0 1px var(--primary-deep),
+    inset 0 -3px 0 var(--primary-deep);
+}
+
+.btn-menu:hover:not(:disabled) {
+  background: #3b8de0;
+}
+
+.btn-menu.btn-on {
+  background: var(--panel-soft);
+  color: var(--ink);
+  box-shadow:
+    0 0 0 1px var(--panel-edge),
+    var(--press);
+}
+
+.badge {
+  display: grid;
+  place-items: center;
+  min-width: 1.3rem;
+  height: 1.3rem;
+  padding: 0 0.3rem;
+  border-radius: 999px;
+  background: var(--accent);
+  color: var(--ink);
+  font-size: 0.75rem;
+  font-weight: 800;
+}
+
+/* The menu floats above the turn bar, over the board. */
+.panel-actions {
+  position: absolute;
+  right: 0;
+  bottom: calc(100% + 0.6rem);
+  z-index: 5;
+  width: min(25rem, calc(100vw - 2rem));
+  max-height: min(60vh, 34rem);
+  overflow-y: auto;
+  scrollbar-width: thin;
+  box-shadow:
+    0 12px 32px rgb(10 40 70 / 38%),
+    0 0 0 1px var(--panel-edge);
+}
+
+.panel-actions[hidden] {
+  display: none;
 }
 
 .side {
@@ -968,6 +1068,21 @@ select {
 .btn-on:hover:not(:disabled),
 .btn-go:hover:not(:disabled) {
   background: #3b8de0;
+}
+
+.btn-wide {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 0.75rem;
+  width: 100%;
+  text-align: left;
+}
+
+.btn-meta {
+  font-size: 0.75rem;
+  font-weight: 600;
+  opacity: 0.7;
 }
 
 .btn-compose {

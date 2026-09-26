@@ -62,6 +62,8 @@ export interface Ui {
   readonly draft: Draft | null;
   /** Several actions offered at one spot, awaiting a pick. */
   readonly choice: readonly Placement[] | null;
+  /** Whether the player has pulled up the action menu. */
+  readonly menu: boolean;
   readonly lines: readonly Line[];
   readonly notice: string | null;
   /**
@@ -93,6 +95,7 @@ export interface Handlers {
   readonly submitDraft: () => void;
   readonly cancelDraft: () => void;
   readonly chooseNothing: () => void;
+  readonly toggleMenu: () => void;
   readonly newGame: (request: NewGameRequest) => void;
 }
 
@@ -376,35 +379,109 @@ export function bankPanel(ui: Ui): HTMLElement {
 
 // ── Actions ─────────────────────────────────────────────────────────────────────────────────
 
-export function actionsPanel(ui: Ui, on: Handlers): HTMLElement {
-  if (!ui.ready) {
-    // Offering moves that cannot be delivered would be a lie the reconnect then has to walk back.
-    return panel('Actions', [
-      text('p', 'notice', ui.notice ?? 'Reconnecting…'),
-      text('p', 'muted', 'The board below is the last thing the server told us.'),
-    ]);
-  }
-  if (ui.view.outcome !== null) {
-    return panel('Actions', [text('p', 'muted', 'The game is over.')]);
-  }
-  if (ui.seat === null || !ui.actors.includes(ui.seat)) {
-    const waiting = ui.actors.map((p) => playerName(ui.view.players, p)).join(', ');
-    return panel('Actions', [
-      text('p', 'muted', waiting === '' ? 'Nobody can act.' : `Waiting for ${waiting}.`),
-    ]);
-  }
-  if (ui.draft !== null) return panel('Actions', [draftForm(ui, ui.draft, on)]);
-  if (ui.choice !== null) return panel('Actions', [choiceBlock(ui, ui.choice, on)]);
+/**
+ * Whether the action menu is up. The player pulls it up; the game only forces it open when the
+ * player is already mid-way through something that lives there — a composer they opened, or a
+ * spot they clicked that needs a second choice.
+ */
+function menuOpen(ui: Ui): boolean {
+  return ui.menu || ui.draft !== null || ui.choice !== null;
+}
 
-  const groups = ui.affordances.groups.map((group) => groupBlock(ui, group, on));
-  const notice = ui.notice === null ? [] : [text('p', 'notice', ui.notice)];
-  return panel('Actions', [...notice, ...groups]);
+/** Can the viewer act right now? Everything the menu offers hangs off this. */
+function acting(ui: Ui): boolean {
+  return ui.ready && ui.view.outcome === null && ui.seat !== null && ui.actors.includes(ui.seat);
+}
+
+/**
+ * The strip under the board: what the game wants, and the button that pulls up the menu.
+ *
+ * It never grows. Everything that could — the menu, a composer — opens *over* the board from here
+ * rather than pushing it, so the board keeps its size however much there is to do.
+ */
+export function turnBar(ui: Ui, on: Handlers): HTMLElement {
+  const lines: HTMLElement[] = [text('p', 'turn-say', prompt(ui))];
+  const selected = ui.affordances.groups.find((g) => g.key === ui.group);
+  if (selected !== undefined) {
+    lines.push(
+      h('p', {
+        attrs: { class: 'turn-hint' },
+        children: [
+          `Pick a highlighted spot to ${selected.note}. `,
+          h('button', {
+            attrs: { class: 'link', type: 'button' },
+            on: { click: () => on.selectGroup(null) },
+            children: ['Cancel'],
+          }),
+        ],
+      }),
+    );
+  }
+  if (ui.notice !== null && ui.ready) lines.push(text('p', 'notice', ui.notice));
+
+  const open = menuOpen(ui);
+  const offered = ui.affordances.groups.length;
+  return h('div', {
+    attrs: { class: 'turn-bar' },
+    children: [
+      h('div', { attrs: { class: 'turn-prompt' }, children: lines }),
+      acting(ui)
+        ? h('button', {
+            attrs: {
+              class: `btn btn-menu${open ? ' btn-on' : ''}`,
+              type: 'button',
+              'aria-expanded': open ? 'true' : 'false',
+              'aria-controls': 'action-menu',
+            },
+            on: { click: () => on.toggleMenu() },
+            children: [open ? 'Close' : 'Actions', open ? null : text('span', 'badge', offered)],
+          })
+        : null,
+    ],
+  });
+}
+
+function prompt(ui: Ui): string {
+  if (!ui.ready) return ui.notice ?? 'Reconnecting…';
+  if (ui.view.outcome !== null) return 'The game is over.';
+  const waiting = ui.actors.map((p) => playerName(ui.view.players, p)).join(', ');
+  if (!acting(ui)) return waiting === '' ? 'Nobody can act.' : `Waiting for ${waiting}.`;
+  const step = ui.view.stack.at(-1);
+  return `Your move — ${stepName(step?.kind ?? '').toLowerCase()}`;
+}
+
+/**
+ * The action menu: every offer, as a panel that opens above the turn bar.
+ *
+ * Always in the document, hidden while closed, so it keeps its place as the first panel and a
+ * screen reader can find it through the toggle's `aria-controls`.
+ */
+export function actionsPanel(ui: Ui, on: Handlers): HTMLElement {
+  const body = ((): HTMLElement[] => {
+    if (!ui.ready) {
+      // Offering moves that cannot be delivered would be a lie the reconnect then has to walk back.
+      return [
+        text('p', 'notice', ui.notice ?? 'Reconnecting…'),
+        text('p', 'muted', 'The board is the last thing the server told us.'),
+      ];
+    }
+    if (ui.view.outcome !== null) return [text('p', 'muted', 'The game is over.')];
+    if (!acting(ui)) return [text('p', 'muted', prompt(ui))];
+    if (ui.draft !== null) return [draftForm(ui, ui.draft, on)];
+    if (ui.choice !== null) return [choiceBlock(ui, ui.choice, on)];
+    return ui.affordances.groups.map((group) => groupBlock(ui, group, on));
+  })();
+
+  const section = panel('Actions', body);
+  section.id = 'action-menu';
+  if (!menuOpen(ui) || !acting(ui)) section.hidden = true;
+  return section;
 }
 
 /**
  * One spot, several things to do there — the robber arriving on a hex with two players on it.
  *
- * Resolved in the panel rather than as a popup over the board: the choice is between *players*,
+ * Resolved in the menu rather than as a popup over the board: the choice is between *players*,
  * not between places, so there is nothing for a popup to point at.
  */
 function choiceBlock(ui: Ui, options: readonly Placement[], on: Handlers): HTMLElement {
@@ -433,41 +510,40 @@ function choiceBlock(ui: Ui, options: readonly Placement[], on: Handlers): HTMLE
   });
 }
 
+/**
+ * One offer. A lone button needs no heading — "Roll the dice" says what "roll the dice" would —
+ * so the note is only printed over a group with several buttons to tell apart.
+ */
 function groupBlock(ui: Ui, group: Group, on: Handlers): HTMLElement {
-  const children: HTMLElement[] = [text('h3', 'sub', group.note)];
+  const buttons: HTMLElement[] = [];
 
   if (group.placements.length > 0) {
     const selected = ui.group === group.key;
-    children.push(
+    const n = group.placements.length;
+    buttons.push(
       h('button', {
-        attrs: { class: `btn${selected ? ' btn-on' : ''}`, type: 'button' },
+        attrs: { class: `btn btn-wide${selected ? ' btn-on' : ''}`, type: 'button' },
         on: { click: () => on.selectGroup(selected ? null : group.key) },
         children: [
-          selected
-            ? `Showing ${group.placements.length} spots — click the board`
-            : `Show ${group.placements.length} spots`,
+          capitalize(group.note),
+          text('span', 'btn-meta', selected ? 'hide spots' : `${n} spot${n === 1 ? '' : 's'}`),
         ],
       }),
     );
   }
 
-  if (group.choices.length > 0) {
-    children.push(
-      h('div', {
-        attrs: { class: 'btns' },
-        children: group.choices.map((action) =>
-          h('button', {
-            attrs: { class: 'btn', type: 'button' },
-            on: { click: () => on.act(action) },
-            children: [describeAction(ui.view, action)],
-          }),
-        ),
+  for (const action of group.choices) {
+    buttons.push(
+      h('button', {
+        attrs: { class: 'btn', type: 'button' },
+        on: { click: () => on.act(action) },
+        children: [describeAction(ui.view, action)],
       }),
     );
   }
 
   if (!group.enumerated) {
-    children.push(
+    buttons.push(
       h('button', {
         attrs: { class: 'btn btn-compose', type: 'button' },
         on: { click: () => on.compose(group) },
@@ -476,7 +552,15 @@ function groupBlock(ui: Ui, group: Group, on: Handlers): HTMLElement {
     );
   }
 
-  return h('div', { attrs: { class: 'group' }, children });
+  const heading = buttons.length > 1 ? [text('h3', 'sub', group.note)] : [];
+  return h('div', {
+    attrs: { class: 'group' },
+    children: [...heading, h('div', { attrs: { class: 'btns' }, children: buttons })],
+  });
+}
+
+function capitalize(s: string): string {
+  return s.charAt(0).toUpperCase() + s.slice(1);
 }
 
 // ── Composing what the engine could not enumerate ───────────────────────────────────────────

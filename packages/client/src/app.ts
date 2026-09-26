@@ -31,6 +31,7 @@ import {
   logPanel,
   type NewGameRequest,
   playersPanel,
+  turnBar,
   type Ui,
   type Watching,
 } from './panels.js';
@@ -66,6 +67,8 @@ export class App {
   private at = -1;
   /** How far into the board we are looking. Kept here because the board is rebuilt every render. */
   private zoom: Zoom = WHOLE;
+  /** Whether the player has pulled up the action menu. */
+  private menu = false;
 
   constructor(root: HTMLElement, table: Table, on: AppHandlers) {
     this.root = root;
@@ -77,6 +80,7 @@ export class App {
       this.choice = null;
       this.draft = null;
       this.group = null;
+      this.menu = false;
       this.table.dismiss();
       this.render();
     });
@@ -111,6 +115,7 @@ export class App {
       group: this.group,
       draft: this.draft,
       choice: this.choice,
+      menu: this.menu,
       lines: snap.events.map((event) => narrate(snap.view, event)),
       notice: this.table.notice,
       watching: this.watching,
@@ -137,11 +142,17 @@ export class App {
                   this.zoomControls(scene.viewBox),
                 ],
               }),
-              // What you hold and what you may do, docked under the board. Actions come first in
-              // the DOM (it is the panel a keyboard user wants first); CSS puts the hand on the left.
+              // What you hold and what you may do, docked under the board. The turn dock comes
+              // first in the DOM (its menu is the first panel); CSS puts the hand on the left.
               h('div', {
                 attrs: { class: 'hud' },
-                children: [actionsPanel(ui, on), handPanel(ui)],
+                children: [
+                  h('div', {
+                    attrs: { class: 'turn-dock' },
+                    children: [actionsPanel(ui, on), turnBar(ui, on)],
+                  }),
+                  handPanel(ui),
+                ],
               }),
             ],
           }),
@@ -207,6 +218,18 @@ export class App {
       selectGroup: (group) => {
         this.group = group;
         this.choice = null;
+        // Picking a kind of spot is a request to look at the board, so get out of its way.
+        this.menu = false;
+        this.render();
+      },
+      toggleMenu: () => {
+        const open = this.menu || this.draft !== null || this.choice !== null;
+        this.menu = !open;
+        if (open) {
+          this.draft = null;
+          this.choice = null;
+          this.table.dismiss();
+        }
         this.render();
       },
       watch: (watching) => {
@@ -214,6 +237,7 @@ export class App {
         this.group = null;
         this.choice = null;
         this.draft = null;
+        this.menu = false;
         this.render();
       },
       compose: (group) => {
@@ -268,6 +292,8 @@ export class App {
       this.render();
       return;
     }
+    // The menu was a means to this move; once it is made, the board is what matters.
+    this.menu = false;
     this.table.act(seat, action);
     this.render();
   }

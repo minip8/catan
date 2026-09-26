@@ -174,7 +174,6 @@ export class App {
     const svg = boardSvg(scene, { onTarget }) as SVGSVGElement;
     const base = parseBox(scene.viewBox);
     svg.setAttribute('viewBox', boxString(viewOf(base, this.zoom)));
-    svg.classList.toggle('board-zoomed', this.zoom.scale > 1);
     svg.classList.toggle('board-spots', this.spots);
     // Gestures only remember the zoom: they move the live SVG themselves, and re-rendering on
     // every wheel tick would rebuild the board for nothing.
@@ -208,7 +207,7 @@ export class App {
       children: [
         control('+', 'Zoom in', this.zoom.scale >= MAX_SCALE, () => step(1.5)),
         control('−', 'Zoom out', this.zoom.scale <= 1, () => step(1 / 1.5)),
-        control('⤢', 'Show the whole board', this.zoom.scale <= 1, () => {
+        control('⤢', 'Show the whole board', this.zoom === WHOLE, () => {
           this.zoom = WHOLE;
           this.render();
         }),

@@ -50,7 +50,17 @@ export function boardSvg(scene: Scene, handlers: BoardHandlers): SVGElement {
       // ripples, fading to nothing at the edge so the board has no visible frame. Sea hexes still
       // draw (the topology is what says where the coast is) but all but vanish into it.
       s('rect', { attrs: { class: 'sea', x, y, width, height, fill: 'url(#b-sea)' } }),
-      s('rect', { attrs: { class: 'sea-ripple', x, y, width, height, fill: 'url(#b-ripple)' } }),
+      // Ripples run well past the board, because a dragged board shows what lies beyond it.
+      s('rect', {
+        attrs: {
+          class: 'sea-ripple',
+          x: x - width * 2,
+          y: y - height * 2,
+          width: width * 5,
+          height: height * 5,
+          fill: 'url(#b-ripple)',
+        },
+      }),
       // The beach: every land tile's outline, stroked wide in sand beneath the tiles, so the island
       // gets a coastline and the tiles a seam without any geometry of its own.
       s('g', {

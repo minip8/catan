@@ -35,19 +35,20 @@ export function parseBox(viewBox: string): Box {
   return { x, y, width, height };
 }
 
-/** The part of `base` a zoom shows. Always inside `base`: you cannot pan off the edge of the sea. */
+/**
+ * The part of the scene a zoom shows.
+ *
+ * The board can be dragged at any zoom, even whole, so the view may run past the sea's edge; what
+ * it may not do is lose the board. The middle of the view is kept inside `base`, which leaves at
+ * least a quarter of the board on screen however far it is flung.
+ */
 export function viewOf(base: Box, zoom: Zoom): Box {
   const scale = clamp(zoom.scale, MIN_SCALE, MAX_SCALE);
   const width = base.width / scale;
   const height = base.height / scale;
-  const cx = zoom.cx ?? base.x + base.width / 2;
-  const cy = zoom.cy ?? base.y + base.height / 2;
-  return {
-    x: clamp(cx - width / 2, base.x, base.x + base.width - width),
-    y: clamp(cy - height / 2, base.y, base.y + base.height - height),
-    width,
-    height,
-  };
+  const cx = clamp(zoom.cx ?? base.x + base.width / 2, base.x, base.x + base.width);
+  const cy = clamp(zoom.cy ?? base.y + base.height / 2, base.y, base.y + base.height);
+  return { x: cx - width / 2, y: cy - height / 2, width, height };
 }
 
 export function boxString(box: Box): string {
@@ -58,7 +59,6 @@ export function boxString(box: Box): string {
 export function zoomAt(base: Box, zoom: Zoom, factor: number, px: number, py: number): Zoom {
   const view = viewOf(base, zoom);
   const scale = clamp(zoom.scale * factor, MIN_SCALE, MAX_SCALE);
-  if (scale === MIN_SCALE) return WHOLE;
   const width = base.width / scale;
   const height = base.height / scale;
   const x = px - ((px - view.x) / view.width) * width;
@@ -113,7 +113,6 @@ export function attachZoom(
   const apply = (next: Zoom): void => {
     zoom = next;
     svg.setAttribute('viewBox', boxString(viewOf(base, zoom)));
-    svg.classList.toggle('board-zoomed', zoom.scale > MIN_SCALE);
     store(zoom);
   };
 
@@ -165,7 +164,7 @@ export function attachZoom(
       dragged = true;
       svg.setPointerCapture?.(event.pointerId);
     }
-    if (dragged && zoom.scale > MIN_SCALE) {
+    if (dragged) {
       const k = unit();
       apply(panBy(base, zoom, (last.x - now.x) * k, (last.y - now.y) * k));
     }

@@ -27,13 +27,7 @@ import { pieceIcon } from './board.js';
 import { h, text } from './dom.js';
 import { glyphIcon, uiIcon } from './icons.js';
 import { bundleText, describeAction, type Line, stepName } from './narrate.js';
-import {
-  type Affordances,
-  defaultGroup,
-  type Group,
-  type Placement,
-  visibleTargets,
-} from './targets.js';
+import { type Affordances, defaultGroup, type Group, type Placement } from './targets.js';
 import { cardDefName, cardStyle, humanize, pieceName, playerName, seatStyle } from './theme.js';
 
 /** A composed action the engine could not enumerate: a discard, or a trade offer. */
@@ -73,8 +67,8 @@ export interface Ui {
   readonly choice: readonly Placement[] | null;
   /** Whether the ⚙ game menu is open. */
   readonly settings: boolean;
-  /** Whether every legal spot is lit, rather than only the one under the pointer. */
-  readonly spots: boolean;
+  /** A kind of spot being previewed from its tile under the pointer. */
+  readonly preview: string | null;
   /** A development card in hand whose ways of being played are on show. */
   readonly dev: string | null;
   readonly lines: readonly Line[];
@@ -110,7 +104,8 @@ export interface Handlers {
   readonly cancelDraft: () => void;
   readonly chooseNothing: () => void;
   readonly toggleSettings: () => void;
-  readonly toggleSpots: () => void;
+  /** Preview a group's spots while its tile is hovered; `null` when the pointer leaves. */
+  readonly preview: (group: string | null) => void;
   readonly pickDev: (card: string | null) => void;
   readonly newGame: (request: NewGameRequest) => void;
 }
@@ -299,6 +294,17 @@ export function youPanel(ui: Ui): HTMLElement | null {
   ]);
 }
 
+/** Army before road, as on Colonist's scoreboard; awards nobody has placed come after. */
+const AWARD_ORDER = ['largestArmy', 'longestRoad'];
+
+function byAwardOrder(a: { readonly id: string }, b: { readonly id: string }): number {
+  const rank = (id: string): number => {
+    const i = AWARD_ORDER.indexOf(id);
+    return i === -1 ? AWARD_ORDER.length : i;
+  };
+  return rank(a.id) - rank(b.id);
+}
+
 /** Known awards' pictures. Anything else is shown by its initial. */
 const AWARD_ICONS: Readonly<Record<string, string>> = {
   largestArmy: 'army',
@@ -319,7 +325,7 @@ function playerRow(ui: Ui, id: PlayerId): HTMLElement {
 
   // The award metrics read only public state — roads on the board, knights face up — so they run
   // on the redacted view as they would on the full state.
-  const awards = Object.values(ui.ctx.rules.awards).map((award) => {
+  const awards = [...Object.values(ui.ctx.rules.awards)].sort(byAwardOrder).map((award) => {
     let value: number | null;
     try {
       value = award.metric(ui.ctx, ui.view as unknown as GameState, id);
@@ -670,6 +676,7 @@ function actionTiles(ui: Ui, on: Handlers): HTMLElement[] {
         count: seat?.supply[meta.id],
         on: selected,
         click: group === undefined ? null : () => on.selectGroup(selected ? null : group.key),
+        hover: group === undefined ? undefined : (over) => on.preview(over ? group.key : null),
       }),
     );
   }
@@ -705,6 +712,8 @@ interface Tile {
   readonly go?: boolean;
   /** `null` when the engine is not offering it: dimmed, and not a button that does anything. */
   readonly click: (() => void) | null;
+  /** Called with `true` as the pointer rests on the tile and `false` as it leaves. */
+  readonly hover?: ((over: boolean) => void) | undefined;
 }
 
 function actionTile(tile: Tile): HTMLElement {
@@ -715,7 +724,15 @@ function actionTile(tile: Tile): HTMLElement {
       title: tile.label,
       disabled: tile.click === null,
     },
-    on: tile.click === null ? {} : { click: tile.click },
+    on: {
+      ...(tile.click === null ? {} : { click: tile.click }),
+      ...(tile.hover === undefined
+        ? {}
+        : {
+            mouseenter: () => tile.hover?.(true),
+            mouseleave: () => tile.hover?.(false),
+          }),
+    },
     children: [
       tile.icon,
       text('span', 'sr-only', tile.label),
@@ -725,8 +742,8 @@ function actionTile(tile: Tile): HTMLElement {
 }
 
 /**
- * The moment's question, over the action bar: where to find a spot, whom to rob, whether to
- * accept an offer, a refusal to explain. Absent when there is nothing to ask.
+ * The moment's question, over the action bar: whom to rob, whether to accept an offer, a
+ * refusal to explain. Absent when there is nothing to ask.
  */
 export function turnBox(ui: Ui, on: Handlers): HTMLElement | null {
   const children: HTMLElement[] = [];
@@ -735,24 +752,6 @@ export function turnBox(ui: Ui, on: Handlers): HTMLElement | null {
     return children.length === 0 ? null : h('div', { attrs: { class: 'turn-box' }, children });
   }
 
-  // Spots are only lit under the pointer unless the player asks for all of them, so say so
-  // whenever there are some to find.
-  const selected = ui.affordances.groups.find((g) => g.key === ui.group);
-  if (visibleTargets(ui.affordances, ui.group).length > 0) {
-    const link = (label: string, click: () => void): HTMLElement =>
-      h('button', { attrs: { class: 'link', type: 'button' }, on: { click }, children: [label] });
-    children.push(
-      h('p', {
-        attrs: { class: 'turn-hint' },
-        children: [
-          selected === undefined ? '' : `${capitalize(selected.note)}: `,
-          ui.spots ? 'pick a lit spot. ' : 'hover the board to find a spot. ',
-          link(ui.spots ? 'Hide spots' : 'Show all', () => on.toggleSpots()),
-          ...(selected === undefined ? [] : [' · ', link('Cancel', () => on.selectGroup(null))]),
-        ],
-      }),
-    );
-  }
   if (ui.notice !== null) children.push(text('p', 'notice', ui.notice));
   if (ui.choice !== null) children.push(choiceBlock(ui, ui.choice, on));
 

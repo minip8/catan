@@ -47,6 +47,9 @@
   --lift-2: 0 6px 18px rgb(10 40 70 / 28%);
   --press: inset 0 -3px 0 rgb(0 0 0 / 14%);
 
+  /* The hand strip and the action tiles stand the same height along the bottom edge. */
+  --hud-h: 6.4rem;
+
   color-scheme: light;
 }
 
@@ -99,7 +102,7 @@ select {
    can still carry it underneath. */
 .board-wrap {
   position: absolute;
-  inset: 0 0 7.5rem;
+  inset: 0 0 calc(var(--hud-h) + 0.5rem);
 }
 
 .board {
@@ -335,6 +338,8 @@ select {
   align-items: flex-end;
   gap: 0.45rem;
   flex: none;
+  /* Bottom right, however narrow the hand. */
+  margin-left: auto;
   padding-right: 0.6rem;
 }
 
@@ -394,21 +399,6 @@ select {
   margin-top: 0.45rem;
 }
 
-.turn-hint {
-  font-size: 0.85rem;
-  color: var(--ink-dim);
-}
-
-.link {
-  padding: 0;
-  border: 0;
-  background: none;
-  color: var(--primary);
-  font-weight: 700;
-  text-decoration: underline;
-  cursor: pointer;
-}
-
 /* The action bar: square tiles standing on the bottom edge, as on Colonist. */
 .panel.panel-actions {
   padding: 0;
@@ -425,8 +415,8 @@ select {
   position: relative;
   display: grid;
   place-items: center;
-  width: 4.6rem;
-  height: 4.6rem;
+  width: 5.2rem;
+  height: var(--hud-h);
   padding: 0;
   border: 2px solid #eef4fb;
   border-bottom: 0;
@@ -554,10 +544,12 @@ select {
 
   .hud .panel-hand {
     order: 0;
+    flex: none;
   }
 
   .turn-dock {
     align-items: stretch;
+    margin-left: 0;
     padding: 0 0.5rem;
   }
 
@@ -801,9 +793,9 @@ select {
   pointer-events: none;
 }
 
-/* Live spots. Hidden until the pointer finds one, so the board is not papered over with rings;
-   the player can opt into seeing all of them (`.board-spots`), which then breathe slowly so a
-   board with forty legal roads stays readable. Hidden spots keep their hit area. */
+/* Live spots. They only exist when there is something to place — the opening, the robber, or a
+   piece the player picked (or is hovering) on the action bar — so they are always lit, breathing
+   slowly so a board with forty legal roads stays readable. */
 .target {
   cursor: pointer;
 }
@@ -812,20 +804,11 @@ select {
 .target-hex,
 .target-edge {
   fill: #eef27c;
-  fill-opacity: 0;
+  fill-opacity: 0.5;
   stroke: #9da236;
   stroke-width: 2;
-  stroke-opacity: 0;
-  transition:
-    fill-opacity 120ms ease,
-    stroke-opacity 120ms ease;
-}
-
-.board-spots .target-vertex,
-.board-spots .target-hex,
-.board-spots .target-edge {
-  stroke-opacity: 1;
   animation: target-breathe 2.6s ease-in-out infinite;
+  transition: fill-opacity 120ms ease;
 }
 
 @keyframes target-breathe {
@@ -1045,9 +1028,10 @@ select {
 .panel-hand {
   display: flex;
   flex-direction: column;
-  flex: 1;
+  /* As wide as a full hand needs and no wider; a bigger hand scrolls. */
+  flex: 0 1 32rem;
   min-width: 0;
-  height: 6.9rem;
+  height: var(--hud-h);
   padding: 0.55rem 0.9rem 0.4rem;
   border-radius: 0 var(--r-lg) 0 0;
   background: #f8f6f0;
@@ -1580,9 +1564,9 @@ select {
     transition-duration: 0.001ms !important;
   }
 
-  .board-spots .target-vertex,
-  .board-spots .target-hex,
-  .board-spots .target-edge {
+  .target-vertex,
+  .target-hex,
+  .target-edge {
     fill-opacity: 0.6;
   }
 }

@@ -26,7 +26,8 @@ export interface Zoom {
   readonly cy: number | null;
 }
 
-export const MIN_SCALE = 1;
+/** Below 1 the board is smaller than its box: room to see it whole whatever the screen. */
+export const MIN_SCALE = 0.5;
 export const MAX_SCALE = 4;
 export const WHOLE: Zoom = { scale: 1, cx: null, cy: null };
 
@@ -92,7 +93,13 @@ function clamp(n: number, min: number, max: number): number {
 const SLOP = 5;
 
 /**
- * Wire wheel, drag and pinch onto a board SVG.
+ * Wire wheel, drag and pinch onto a board SVG, listening on `surface` — the whole area the board
+ * can be seen in, not just the SVG's own box.
+ *
+ * That matters because the board draws past its box once dragged, and because a wheel or pinch
+ * the board does not handle is one the browser does: a trackpad pinch over open water would zoom
+ * the *page*, which the board's own controls then cannot undo. Anything over the controls that
+ * float on the surface (`.hud`, `.rail`) is left alone.
  *
  * A drag that moved more than a few pixels swallows the click that ends it, so panning across a
  * live spot does not build on it. `store` is called on every change, and is expected to remember
@@ -100,6 +107,7 @@ const SLOP = 5;
  */
 export function attachZoom(
   svg: SVGSVGElement,
+  surface: HTMLElement,
   base: Box,
   initial: Zoom,
   store: (zoom: Zoom) => void,
@@ -109,6 +117,9 @@ export function attachZoom(
   let dragged = false;
   let start: { x: number; y: number } | null = null;
   let pinch: number | null = null;
+
+  const onBoard = (target: EventTarget | null): boolean =>
+    !(target instanceof Element) || target.closest('.hud, .rail') === null;
 
   const apply = (next: Zoom): void => {
     zoom = next;
@@ -125,9 +136,10 @@ export function attachZoom(
     return { x: point.x, y: point.y };
   };
 
-  svg.addEventListener(
+  surface.addEventListener(
     'wheel',
     (event) => {
+      if (!onBoard(event.target)) return;
       event.preventDefault();
       const at = toScene(event.clientX, event.clientY);
       apply(zoomAt(base, zoom, Math.exp(-event.deltaY * 0.0015), at.x, at.y));
@@ -135,7 +147,8 @@ export function attachZoom(
     { passive: false },
   );
 
-  svg.addEventListener('pointerdown', (event) => {
+  surface.addEventListener('pointerdown', (event) => {
+    if (!onBoard(event.target)) return;
     pointers.set(event.pointerId, { x: event.clientX, y: event.clientY });
     if (pointers.size === 1) {
       start = { x: event.clientX, y: event.clientY };
@@ -144,7 +157,7 @@ export function attachZoom(
     if (pointers.size === 2) pinch = spread(pointers);
   });
 
-  svg.addEventListener('pointermove', (event) => {
+  surface.addEventListener('pointermove', (event) => {
     const last = pointers.get(event.pointerId);
     if (last === undefined) return;
     const now = { x: event.clientX, y: event.clientY };
@@ -162,7 +175,7 @@ export function attachZoom(
 
     if (start !== null && !dragged && Math.hypot(now.x - start.x, now.y - start.y) > SLOP) {
       dragged = true;
-      svg.setPointerCapture?.(event.pointerId);
+      surface.setPointerCapture?.(event.pointerId);
     }
     if (dragged) {
       const k = unit();
@@ -175,11 +188,11 @@ export function attachZoom(
     if (pointers.size < 2) pinch = null;
     if (pointers.size === 0) start = null;
   };
-  svg.addEventListener('pointerup', release);
-  svg.addEventListener('pointercancel', release);
+  surface.addEventListener('pointerup', release);
+  surface.addEventListener('pointercancel', release);
 
   // Capture phase, so it runs before a target's own click handler and can cancel it.
-  svg.addEventListener(
+  surface.addEventListener(
     'click',
     (event) => {
       if (!dragged) return;

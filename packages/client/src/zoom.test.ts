@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { MAX_SCALE, panBy, viewOf, WHOLE, zoomAt } from './zoom.js';
+import { MAX_SCALE, MIN_SCALE, panBy, viewOf, WHOLE, zoomAt } from './zoom.js';
 
 const base = { x: -100, y: -50, width: 400, height: 200 };
 
@@ -32,8 +32,8 @@ describe('zoom', () => {
     expect(back.x).toBeCloseTo(view.x - 10);
   });
 
-  it('clamps between the whole board and the closest zoom', () => {
-    expect(zoomAt(base, WHOLE, 0.5, 0, 0).scale).toBe(1);
+  it('clamps between a board smaller than its box and the closest zoom', () => {
+    expect(zoomAt(base, WHOLE, 0.01, 0, 0).scale).toBe(MIN_SCALE);
     expect(zoomAt(base, WHOLE, 100, 0, 0).scale).toBe(MAX_SCALE);
   });
 });

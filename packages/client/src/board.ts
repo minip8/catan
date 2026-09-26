@@ -168,10 +168,11 @@ function outlineOf(hex: HexShape): string {
 }
 
 /**
- * Where a terrain's glyph stands, as fractions of the hex size: one large emblem above the token,
- * flanked by two small tufts, the way a printed tile carries one picture rather than a pattern.
+ * Where a terrain's glyph stands, as fractions of the hex size: one emblem above the token, sized
+ * to stay inside the tile's narrowing top (a pointy hex is only half as wide there), flanked by
+ * two small tufts, the way a printed tile carries one picture rather than a pattern.
  */
-const ART_SLOTS: readonly (readonly [number, number, number])[] = [[0, -0.44, 1.5]];
+const ART_SLOTS: readonly (readonly [number, number, number])[] = [[0, -0.4, 1.1]];
 const TUFTS: readonly (readonly [number, number])[] = [
   [-0.5, -0.12],
   [0.52, 0.05],

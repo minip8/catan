@@ -44,6 +44,7 @@ import {
   attachZoom,
   boxString,
   MAX_SCALE,
+  MIN_SCALE,
   parseBox,
   viewOf,
   WHOLE,
@@ -71,8 +72,8 @@ export class App {
   private zoom: Zoom = WHOLE;
   /** Whether the ⚙ game menu is open. */
   private settings = false;
-  /** Whether every legal spot is lit, rather than only the one under the pointer. Opt-in. */
-  private spots = false;
+  /** A kind of spot the pointer is resting on the tile for: shown until it moves off. */
+  private preview: string | null = null;
   /** A development card in hand whose ways of being played are on show. */
   private dev: string | null = null;
 
@@ -124,7 +125,7 @@ export class App {
       draft: this.draft,
       choice: this.choice,
       settings: this.settings,
-      spots: this.spots,
+      preview: this.preview,
       dev: this.dev,
       lines: snap.events.map((event) => narrate(snap.view, event)),
       notice: this.table.notice,
@@ -134,7 +135,16 @@ export class App {
       ready: this.table.ready,
     };
     const on = this.handlers();
-    const scene = boardScene(this.table.ctx, snap.view, visibleTargets(affs, this.group));
+    // A tile being hovered previews its spots; a clicked one keeps them.
+    if (this.preview !== null && !affs.groups.some((g) => g.key === this.preview)) {
+      this.preview = null;
+    }
+    const scene = boardScene(
+      this.table.ctx,
+      snap.view,
+      visibleTargets(affs, this.group ?? this.preview),
+    );
+    const svg = this.board(scene, (locus) => this.onTarget(ui, locus));
 
     // One screen, laid out like an online table: the board fills the play area, with the
     // controls floating over it — the ⚙ rail top left, the hand along the bottom, the action bar
@@ -144,28 +154,22 @@ export class App {
       h('main', {
         attrs: { class: 'table' },
         children: [
-          h('div', {
-            attrs: { class: 'play' },
-            children: [
-              h('div', {
-                attrs: { class: 'board-wrap' },
-                children: [this.board(scene, (locus) => this.onTarget(ui, locus))],
-              }),
-              this.rail(scene.viewBox, ui, on),
-              // The dock comes first in the DOM, so the action bar is the first panel; CSS puts
-              // the hand on its left.
-              h('div', {
-                attrs: { class: 'hud' },
-                children: [
-                  h('div', {
-                    attrs: { class: 'turn-dock' },
-                    children: [turnBox(ui, on), statusPill(ui), actionsPanel(ui, on)],
-                  }),
-                  handPanel(ui, on),
-                ],
-              }),
-            ],
-          }),
+          this.surface(svg, scene.viewBox, [
+            h('div', { attrs: { class: 'board-wrap' }, children: [svg] }),
+            this.rail(scene.viewBox, ui, on),
+            // The dock comes first in the DOM, so the action bar is the first panel; CSS puts
+            // the hand on its left.
+            h('div', {
+              attrs: { class: 'hud' },
+              children: [
+                h('div', {
+                  attrs: { class: 'turn-dock' },
+                  children: [turnBox(ui, on), statusPill(ui), actionsPanel(ui, on)],
+                }),
+                handPanel(ui, on),
+              ],
+            }),
+          ]),
           h('aside', {
             attrs: { class: 'side' },
             children: [logPanel(ui), bankPanel(ui), playersPanel(ui), youPanel(ui)],
@@ -177,20 +181,30 @@ export class App {
 
   // ── Board and zoom ────────────────────────────────────────────────────────────────────────
 
-  private board(scene: ReturnType<typeof boardScene>, onTarget: (locus: string) => void) {
+  private board(
+    scene: ReturnType<typeof boardScene>,
+    onTarget: (locus: string) => void,
+  ): SVGSVGElement {
     const svg = boardSvg(scene, { onTarget }) as SVGSVGElement;
-    const base = parseBox(scene.viewBox);
-    svg.setAttribute('viewBox', boxString(viewOf(base, this.zoom)));
-    svg.classList.toggle('board-spots', this.spots);
-    // Gestures only remember the zoom: they move the live SVG themselves, and re-rendering on
-    // every wheel tick would rebuild the board for nothing.
-    attachZoom(svg, base, this.zoom, (zoom) => {
-      this.zoom = zoom;
-    });
+    svg.setAttribute('viewBox', boxString(viewOf(parseBox(scene.viewBox), this.zoom)));
     return svg;
   }
 
-  /** The round buttons top left: the game menu, zoom, and the spot highlighter. */
+  /**
+   * The play area, which is also what the zoom gestures listen on: the board draws past its own
+   * box once dragged, and a pinch over open water must zoom the board, not the page.
+   */
+  private surface(svg: SVGSVGElement, viewBox: string, children: readonly Node[]): HTMLElement {
+    const play = h('div', { attrs: { class: 'play' }, children });
+    // Gestures only remember the zoom: they move the live SVG themselves, and re-rendering on
+    // every wheel tick would rebuild the board for nothing.
+    attachZoom(svg, play, parseBox(viewBox), this.zoom, (zoom) => {
+      this.zoom = zoom;
+    });
+    return play;
+  }
+
+  /** The round buttons top left: the game menu and zoom. */
   private rail(viewBox: string, ui: Ui, on: Handlers): HTMLElement {
     const base = parseBox(viewBox);
     const step = (factor: number): void => {
@@ -227,21 +241,10 @@ export class App {
         }),
         gameMenu(ui, on),
         control('+', 'Zoom in', this.zoom.scale >= MAX_SCALE, () => step(1.5)),
-        control('−', 'Zoom out', this.zoom.scale <= 1, () => step(1 / 1.5)),
+        control('−', 'Zoom out', this.zoom.scale <= MIN_SCALE, () => step(1 / 1.5)),
         control('⤢', 'Show the whole board', this.zoom === WHOLE, () => {
           this.zoom = WHOLE;
           this.render();
-        }),
-        h('button', {
-          attrs: {
-            class: `zoom-btn zoom-spots${this.spots ? ' zoom-on' : ''}`,
-            type: 'button',
-            title: 'Highlight every legal spot',
-            'aria-label': 'Highlight every legal spot',
-            'aria-pressed': this.spots ? 'true' : 'false',
-          },
-          on: { click: () => on.toggleSpots() },
-          children: ['◎'],
         }),
       ],
     });
@@ -257,8 +260,8 @@ export class App {
       },
       selectGroup: (group) => {
         this.group = group;
+        this.preview = null;
         this.choice = null;
-        // Picking a kind of spot is a request to look at the board, so get out of its way.
         this.render();
       },
       pickDev: (card) => {
@@ -266,8 +269,11 @@ export class App {
         this.draft = null;
         this.render();
       },
-      toggleSpots: () => {
-        this.spots = !this.spots;
+      preview: (group) => {
+        // Hovering re-renders the tile under the pointer, which enters it again; only a change
+        // is worth a render.
+        if (this.preview === group) return;
+        this.preview = group;
         this.render();
       },
       toggleSettings: () => {

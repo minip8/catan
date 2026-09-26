@@ -123,15 +123,18 @@ export function affordances(ctx: RuleContext, specs: readonly ActionSpec[]): Aff
 }
 
 /**
- * The group whose spots show before anyone asks: the only thing on offer, when it is a placement.
+ * The group whose spots are live before anyone asks: the one placement on offer, when it is
+ * something the step requires rather than something the player chose to buy.
  *
- * The opening and the robber offer nothing *but* a spot, so making the player ask to see them
- * would be a click that decides nothing. Anywhere else — a turn with roads, settlements and a roll
- * all on offer — spots are noise until the player says which kind they want.
+ * The opening, the robber and a Road Building placement offer nothing *but* a spot (bar, for the
+ * last, a way to forfeit it), so making the player ask to see them would be a click that decides
+ * nothing. A turn that offers a road *purchase* is different: a stray click on the board must not
+ * spend the player's cards, so builds wait until the player picks one.
  */
 export function defaultGroup(affordances: Affordances): string | null {
-  const [only, ...rest] = affordances.groups;
-  return only !== undefined && rest.length === 0 && only.placements.length > 0 ? only.key : null;
+  const placing = affordances.groups.filter((g) => g.placements.length > 0);
+  const [only, ...rest] = placing;
+  return only !== undefined && rest.length === 0 && only.type !== 'build' ? only.key : null;
 }
 
 /** The targets the board should show: the selected group's, the default group's, or none. */

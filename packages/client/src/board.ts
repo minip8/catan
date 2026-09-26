@@ -415,6 +415,28 @@ function pieceGroup(piece: PieceShape, size: number): SVGElement {
 }
 
 /**
+ * A piece on its own, as an inline icon for the buy menu — the same silhouette, halo and shading
+ * the board draws, so the tile a player clicks looks like the thing they will get.
+ */
+export function pieceIcon(kind: string, fill: string, className: string): SVGElement {
+  const size = 60;
+  const shapes = shapeFor(kind, size, fill);
+  const halo = shapes[0]?.cloneNode(false) as SVGElement | undefined;
+  halo?.setAttribute('class', 'halo');
+  // Roads lie along an edge; in a tile they read better on the diagonal.
+  const tilt = kind === 'road' ? 'rotate(-35)' : '';
+  return s('svg', {
+    attrs: { class: `piece ${className}`, viewBox: '-30 -30 60 60', 'aria-hidden': 'true' },
+    children: [
+      s('g', {
+        attrs: { transform: tilt },
+        children: halo === undefined ? shapes : [halo, ...shapes],
+      }),
+    ],
+  });
+}
+
+/**
  * The drawn form of a piece: a seat-coloured silhouette, then neutral shading over it. Unknown
  * kinds get a disc, which is better than nothing.
  */

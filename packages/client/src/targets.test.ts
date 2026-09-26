@@ -123,6 +123,18 @@ describe('visibleTargets', () => {
     expect(filtered.every((t) => t.options[0]?.action.type === 'a')).toBe(true);
   });
 
+  it('does not offer a purchase unasked', () => {
+    const f = fixture();
+    const hexes = f.ctx.topology.hexes.slice(0, 2);
+    const affs = affordances(f.ctx, [
+      spec(
+        'build',
+        hexes.map((hex) => ({ type: 'build', hex })),
+      ),
+    ]);
+    expect(visibleTargets(affs, null)).toEqual([]);
+  });
+
   it('shows the spots unasked when a placement is all that is on offer', () => {
     const f = fixture();
     const hexes = f.ctx.topology.hexes.slice(0, 2);

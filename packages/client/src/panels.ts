@@ -13,6 +13,7 @@
 
 import {
   type Action,
+  type CardId,
   type CardKind,
   type Cost,
   kindsWhere,
@@ -21,11 +22,18 @@ import {
   type RuleContext,
 } from '@catan/core';
 
+import { pieceIcon } from './board.js';
 import { h, text } from './dom.js';
 import { glyphIcon } from './icons.js';
 import { bundleText, describeAction, type Line, stepName } from './narrate.js';
-import { type Affordances, type Group, type Placement, visibleTargets } from './targets.js';
-import { cardDefName, cardStyle, humanize, playerName, seatStyle } from './theme.js';
+import {
+  type Affordances,
+  defaultGroup,
+  type Group,
+  type Placement,
+  visibleTargets,
+} from './targets.js';
+import { cardDefName, cardStyle, humanize, pieceName, playerName, seatStyle } from './theme.js';
 
 /** A composed action the engine could not enumerate: a discard, or a trade offer. */
 export interface Draft {
@@ -66,6 +74,8 @@ export interface Ui {
   readonly menu: boolean;
   /** Whether every legal spot is lit, rather than only the one under the pointer. */
   readonly spots: boolean;
+  /** A development card in hand whose ways of being played are on show. */
+  readonly dev: string | null;
   readonly lines: readonly Line[];
   readonly notice: string | null;
   /**
@@ -100,6 +110,7 @@ export interface Handlers {
   readonly chooseNothing: () => void;
   readonly toggleMenu: () => void;
   readonly toggleSpots: () => void;
+  readonly pickDev: (card: string | null) => void;
   readonly newGame: (request: NewGameRequest) => void;
 }
 
@@ -347,11 +358,32 @@ export function handPanel(ui: Ui, on: Handlers): HTMLElement {
     .filter(([, n]) => n > 0)
     .map(([kind, n]) => cardChip(kind, n, pick === null ? undefined : () => pick(kind)));
 
+  // A development card is played by clicking it, like a resource is traded by clicking it. The
+  // engine's offers say which cards can be played now and every way each one can be.
+  const plays = acting(ui)
+    ? (ui.affordances.groups.find((g) => g.type === 'playDev')?.choices ?? [])
+    : [];
   const cards = Object.values(player.hands)
     .flat()
     .map((id) => {
       const def = ui.view.cardInstances[id]?.def ?? null;
-      return text('li', `dev${def === null ? ' dev-hidden' : ''}`, cardDefName(def));
+      const ways = plays.filter((a) => a.card === id);
+      const name = cardDefName(def);
+      if (ways.length === 0) return text('li', `dev${def === null ? ' dev-hidden' : ''}`, name);
+      const only = ways.length === 1 ? ways[0] : undefined;
+      return h('li', {
+        attrs: { class: `dev dev-live${ui.dev === id ? ' dev-picked' : ''}` },
+        children: [
+          h('button', {
+            attrs: { class: 'dev-play', type: 'button', title: `Play ${name}` },
+            on: {
+              click: () =>
+                only === undefined ? on.pickDev(ui.dev === id ? null : id) : on.act(only),
+            },
+            children: [name],
+          }),
+        ],
+      });
     });
 
   const revealed = player.revealed.map((id) =>
@@ -385,8 +417,41 @@ export function handPanel(ui: Ui, on: Handlers): HTMLElement {
       ? [text('h3', 'sub', 'Face up'), h('ul', { attrs: { class: 'devs' }, children: revealed })]
       : []),
     ...(ui.draft !== null && acting(ui) ? [draftForm(ui, ui.draft, on)] : []),
+    ...(ui.dev !== null && ui.draft === null ? [devTray(ui, ui.dev, plays, on)] : []),
   ]);
   return section;
+}
+
+/** The ways to play one development card — Monopoly's five, Year of Plenty's pairs. */
+function devTray(ui: Ui, card: string, plays: readonly Action[], on: Handlers): HTMLElement {
+  const ways = plays.filter((a) => a.card === card);
+  return h('div', {
+    attrs: { class: 'tray', role: 'dialog', 'aria-label': 'Play a card' },
+    children: [
+      text(
+        'h3',
+        'tray-title',
+        `Play ${cardDefName(ui.view.cardInstances[card as CardId]?.def ?? null)}`,
+      ),
+      h('div', {
+        attrs: { class: 'btns' },
+        children: [
+          ...ways.map((action) =>
+            h('button', {
+              attrs: { class: 'btn', type: 'button' },
+              on: { click: () => on.act(action) },
+              children: [describeAction(ui.view, action)],
+            }),
+          ),
+          h('button', {
+            attrs: { class: 'btn', type: 'button' },
+            on: { click: () => on.pickDev(null) },
+            children: ['Cancel'],
+          }),
+        ],
+      }),
+    ],
+  });
 }
 
 /**
@@ -437,22 +502,55 @@ export function bankPanel(ui: Ui): HTMLElement {
 }
 
 // ── Actions ─────────────────────────────────────────────────────────────────────────────────
+//
+// Offers are split three ways, the way an online table lays them out:
+//
+// - **Bought** — a piece or a card with a price. These are the Build menu: every purchasable
+//   thing as a priced tile, greyed out when the engine is not offering it.
+// - **Made from the hand** — trades, discards and development cards. The cards in hand are the
+//   controls for these; see `handPanel`.
+// - **Everything else** — rolling, ending the turn, answering an offer. The moves that keep the
+//   game going, as buttons right on the turn bar.
+
+/** Can the viewer act right now? Everything below hangs off this. */
+function acting(ui: Ui): boolean {
+  return ui.ready && ui.view.outcome === null && ui.seat !== null && ui.actors.includes(ui.seat);
+}
+
+function isPurchase(group: Group): boolean {
+  return group.type === 'build' || group.type === 'buyDev';
+}
+
+/** Trades and development cards are made from the hand. A discard is too, but it is also owed. */
+function fromHand(group: Group): boolean {
+  return (
+    group.type === 'playDev' ||
+    group.type === 'tradeBank' ||
+    (!group.enumerated && group.type !== 'discard')
+  );
+}
+
+/** The moves that keep the game going, for the turn bar. */
+function flowGroups(ui: Ui): readonly Group[] {
+  return ui.affordances.groups.filter((g) => !isPurchase(g) && !fromHand(g));
+}
+
+/** Whether this is a moment for buying at all — the part of a turn with a shop open. */
+function shopOpen(ui: Ui): boolean {
+  return ui.affordances.groups.some((g) => isPurchase(g) || fromHand(g));
+}
 
 /**
- * Whether the action menu is up. The player pulls it up; the game only forces it open for a spot
- * they clicked that needs a second choice. Composers live in the tray over the hand instead.
+ * Whether the Build menu is up. The player pulls it up; the game only forces it open for a spot
+ * they clicked that needs a second choice.
  */
 function menuOpen(ui: Ui): boolean {
   return ui.menu || ui.choice !== null;
 }
 
-/** Can the viewer act right now? Everything the menu offers hangs off this. */
-function acting(ui: Ui): boolean {
-  return ui.ready && ui.view.outcome === null && ui.seat !== null && ui.actors.includes(ui.seat);
-}
-
 /**
- * The strip under the board: what the game wants, and the button that pulls up the menu.
+ * The strip under the board: what the game wants, the buttons that move it along, and the one
+ * that pulls up the Build menu.
  *
  * It never grows. Everything that could — the menu, a composer — opens *over* the board from here
  * rather than pushing it, so the board keeps its size however much there is to do.
@@ -469,7 +567,8 @@ export function turnBar(ui: Ui, on: Handlers): HTMLElement {
       h('p', {
         attrs: { class: 'turn-hint' },
         children: [
-          ui.spots ? 'Pick a lit spot on the board. ' : 'Hover the board to find a spot. ',
+          selected === undefined ? '' : `${capitalize(selected.note)}: `,
+          ui.spots ? 'pick a lit spot. ' : 'hover the board to find a spot. ',
           link(ui.spots ? 'Hide spots' : 'Show all', () => on.toggleSpots()),
           ...(selected === undefined ? [] : [' · ', link('Cancel', () => on.selectGroup(null))]),
         ],
@@ -478,25 +577,73 @@ export function turnBar(ui: Ui, on: Handlers): HTMLElement {
   }
   if (ui.notice !== null && ui.ready) lines.push(text('p', 'notice', ui.notice));
 
-  const open = menuOpen(ui);
-  const offered = menuGroups(ui).length;
+  const buttons: HTMLElement[] = acting(ui) ? flowButtons(ui, on) : [];
+  if (acting(ui) && shopOpen(ui)) {
+    const open = menuOpen(ui);
+    const affordable = ui.affordances.groups.filter(isPurchase).length;
+    buttons.push(
+      h('button', {
+        attrs: {
+          class: `btn btn-menu${open ? ' btn-on' : ''}`,
+          type: 'button',
+          'aria-expanded': open ? 'true' : 'false',
+          'aria-controls': 'action-menu',
+        },
+        on: { click: () => on.toggleMenu() },
+        children: [
+          open ? 'Close' : 'Build',
+          open || affordable === 0 ? null : text('span', 'badge', affordable),
+        ],
+      }),
+    );
+  }
+
   return h('div', {
     attrs: { class: 'turn-bar' },
     children: [
       h('div', { attrs: { class: 'turn-prompt' }, children: lines }),
-      acting(ui)
-        ? h('button', {
-            attrs: {
-              class: `btn btn-menu${open ? ' btn-on' : ''}`,
-              type: 'button',
-              'aria-expanded': open ? 'true' : 'false',
-              'aria-controls': 'action-menu',
-            },
-            on: { click: () => on.toggleMenu() },
-            children: [open ? 'Close' : 'Actions', open ? null : text('span', 'badge', offered)],
-          })
-        : null,
+      buttons.length > 0 ? h('div', { attrs: { class: 'turn-btns' }, children: buttons }) : null,
     ],
+  });
+}
+
+/** Roll, end turn, accept, forfeit — one button per offered move, straight on the bar. */
+function flowButtons(ui: Ui, on: Handlers): HTMLElement[] {
+  const auto = defaultGroup(ui.affordances);
+  return flowGroups(ui).flatMap((group) => {
+    const out: HTMLElement[] = [];
+    // A placement the step requires is already live on the board; any other needs picking.
+    if (group.placements.length > 0 && group.key !== auto) {
+      const selected = ui.group === group.key;
+      out.push(
+        h('button', {
+          attrs: { class: `btn${selected ? ' btn-on' : ''}`, type: 'button' },
+          on: { click: () => on.selectGroup(selected ? null : group.key) },
+          children: [capitalize(group.note)],
+        }),
+      );
+    }
+    if (!group.enumerated) {
+      // A discard: composed in the tray over the hand, which this opens.
+      out.push(
+        h('button', {
+          attrs: { class: 'btn btn-go', type: 'button' },
+          on: { click: () => on.compose(group) },
+          children: [`${capitalize(group.note)}…`],
+        }),
+      );
+    } else {
+      for (const action of group.choices) {
+        out.push(
+          h('button', {
+            attrs: { class: 'btn btn-go', type: 'button' },
+            on: { click: () => on.act(action) },
+            children: [describeAction(ui.view, action)],
+          }),
+        );
+      }
+    }
+    return out;
   });
 }
 
@@ -510,7 +657,11 @@ function prompt(ui: Ui): string {
 }
 
 /**
- * The action menu: every offer, as a panel that opens above the turn bar.
+ * The Build menu: everything that can be bought, as priced tiles, opening above the turn bar.
+ *
+ * Every purchasable kind is listed whether or not it is on offer, so the menu doubles as the
+ * price list; the engine's offers only decide which tiles are live. Prices and piece kinds come
+ * from the ruleset's metadata, so a ruleset that adds a ship gets a ship tile.
  *
  * Always in the document, hidden while closed, so it keeps its place as the first panel and a
  * screen reader can find it through the toggle's `aria-controls`.
@@ -527,22 +678,109 @@ export function actionsPanel(ui: Ui, on: Handlers): HTMLElement {
     if (ui.view.outcome !== null) return [text('p', 'muted', 'The game is over.')];
     if (!acting(ui)) return [text('p', 'muted', prompt(ui))];
     if (ui.choice !== null) return [choiceBlock(ui, ui.choice, on)];
-    return menuGroups(ui).map((group) => groupBlock(ui, group, on));
+    return [h('div', { attrs: { class: 'shop' }, children: shopTiles(ui, on) })];
   })();
 
-  const section = panel('Actions', body);
-  section.id = 'action-menu';
+  const section = h('section', {
+    attrs: { class: 'panel panel-actions', id: 'action-menu' },
+    children: [text('h2', 'panel-title', ui.choice === null ? 'Build' : 'Choose'), ...body],
+  });
   if (!menuOpen(ui) || !acting(ui)) section.hidden = true;
   return section;
 }
 
-/**
- * The groups the menu lists. Bank trades are made in the trade tray, where they appear as soon as
- * the cards match one, so when the table can also be offered a trade one entry covers both.
- */
-function menuGroups(ui: Ui): readonly Group[] {
-  const offer = ui.affordances.groups.some((g) => !g.enumerated && g.type !== 'discard');
-  return ui.affordances.groups.filter((group) => !(offer && group.type === 'tradeBank'));
+function shopTiles(ui: Ui, on: Handlers): HTMLElement[] {
+  const seat = ui.seat === null ? null : (ui.view.players[ui.seat] ?? null);
+  const color = seat === null ? '#888' : seatStyle(seat.seat).color;
+  const groups = ui.affordances.groups;
+  const tiles: HTMLElement[] = [];
+
+  for (const meta of Object.values(ui.ctx.rules.pieceKinds)) {
+    if (!meta.owned || meta.cost === undefined) continue;
+    const group = groups.find(
+      (g) => g.type === 'build' && g.placements.some((p) => p.action.kind === meta.id),
+    );
+    const selected = group !== undefined && ui.group === group.key;
+    const left = seat?.supply[meta.id];
+    const n = group?.placements.length ?? 0;
+    tiles.push(
+      shopTile({
+        name: pieceName(meta.id),
+        icon: pieceIcon(meta.id, color, 'shop-icon'),
+        cost: meta.cost,
+        meta:
+          group === undefined
+            ? left === 0
+              ? 'none left'
+              : 'not now'
+            : selected
+              ? 'placing…'
+              : `${n} spot${n === 1 ? '' : 's'}`,
+        on: selected,
+        click: group === undefined ? null : () => on.selectGroup(selected ? null : group.key),
+      }),
+    );
+  }
+
+  const decks = Object.values(ui.ctx.rules.decks);
+  for (const deck of decks) {
+    const choice = groups
+      .find((g) => g.type === 'buyDev')
+      ?.choices.find((a) => a.deck === deck.id || a.deck === undefined);
+    const remaining = ui.view.decks[deck.id]?.remaining ?? 0;
+    tiles.push(
+      shopTile({
+        name: decks.length === 1 ? 'Development card' : `${humanize(deck.id)} card`,
+        icon: h('span', { attrs: { class: 'shop-icon shop-card', 'aria-hidden': 'true' } }),
+        cost: deck.cost,
+        meta: `${remaining} left`,
+        on: false,
+        click: choice === undefined ? null : () => on.act(choice),
+      }),
+    );
+  }
+  return tiles;
+}
+
+interface Tile {
+  readonly name: string;
+  readonly icon: Element;
+  readonly cost: Cost;
+  readonly meta: string;
+  readonly on: boolean;
+  /** `null` when the engine is not offering it: the tile is a price, not a button. */
+  readonly click: (() => void) | null;
+}
+
+function shopTile(tile: Tile): HTMLElement {
+  const cost = Object.entries(tile.cost).flatMap(([kind, n]) =>
+    Array.from({ length: n ?? 0 }, () =>
+      h('span', {
+        attrs: { class: 'cost-card', style: `--card: ${cardStyle(kind).color}` },
+        children: [glyphIcon(kind, 'cost-art') ?? cardStyle(kind).label.charAt(0)],
+      }),
+    ),
+  );
+  return h('button', {
+    attrs: {
+      class: `shop-tile${tile.on ? ' shop-on' : ''}`,
+      type: 'button',
+      disabled: tile.click === null,
+      title: `${tile.name}: ${bundleText(tile.cost)}`,
+    },
+    on: tile.click === null ? {} : { click: tile.click },
+    children: [
+      tile.icon,
+      h('span', {
+        attrs: { class: 'shop-body' },
+        children: [
+          text('span', 'shop-name', tile.name),
+          h('span', { attrs: { class: 'shop-cost', 'aria-hidden': 'true' }, children: cost }),
+        ],
+      }),
+      text('span', 'shop-meta', tile.meta),
+    ],
+  });
 }
 
 /**
@@ -553,92 +791,21 @@ function menuGroups(ui: Ui): readonly Group[] {
  */
 function choiceBlock(ui: Ui, options: readonly Placement[], on: Handlers): HTMLElement {
   return h('div', {
-    attrs: { class: 'group' },
+    attrs: { class: 'btns' },
     children: [
-      text('h3', 'sub', 'Choose'),
-      h('div', {
-        attrs: { class: 'btns' },
-        children: [
-          ...options.map((option) =>
-            h('button', {
-              attrs: { class: 'btn', type: 'button' },
-              on: { click: () => on.act(option.action) },
-              children: [describeAction(ui.view, option.action)],
-            }),
-          ),
-          h('button', {
-            attrs: { class: 'btn', type: 'button' },
-            on: { click: () => on.chooseNothing() },
-            children: ['Cancel'],
-          }),
-        ],
+      ...options.map((option) =>
+        h('button', {
+          attrs: { class: 'btn', type: 'button' },
+          on: { click: () => on.act(option.action) },
+          children: [describeAction(ui.view, option.action)],
+        }),
+      ),
+      h('button', {
+        attrs: { class: 'btn', type: 'button' },
+        on: { click: () => on.chooseNothing() },
+        children: ['Cancel'],
       }),
     ],
-  });
-}
-
-/**
- * One offer. A lone button needs no heading — "Roll the dice" says what "roll the dice" would —
- * so the note is only printed over a group with several buttons to tell apart.
- */
-function groupBlock(ui: Ui, group: Group, on: Handlers): HTMLElement {
-  const buttons: HTMLElement[] = [];
-
-  if (group.placements.length > 0) {
-    const selected = ui.group === group.key;
-    const n = group.placements.length;
-    buttons.push(
-      h('button', {
-        attrs: { class: `btn btn-wide${selected ? ' btn-on' : ''}`, type: 'button' },
-        on: { click: () => on.selectGroup(selected ? null : group.key) },
-        children: [
-          capitalize(group.note),
-          text('span', 'btn-meta', selected ? 'hide spots' : `${n} spot${n === 1 ? '' : 's'}`),
-        ],
-      }),
-    );
-  }
-
-  if (group.type === 'tradeBank') {
-    buttons.push(
-      h('button', {
-        attrs: { class: 'btn', type: 'button' },
-        on: { click: () => on.compose(group) },
-        children: ['Trade with the bank…'],
-      }),
-    );
-  }
-
-  for (const action of group.type === 'tradeBank' ? [] : group.choices) {
-    buttons.push(
-      h('button', {
-        attrs: { class: 'btn', type: 'button' },
-        on: { click: () => on.act(action) },
-        children: [describeAction(ui.view, action)],
-      }),
-    );
-  }
-
-  if (!group.enumerated) {
-    buttons.push(
-      h('button', {
-        attrs: { class: 'btn btn-compose', type: 'button' },
-        on: { click: () => on.compose(group) },
-        children: [
-          group.type === 'discard'
-            ? 'Choose different cards…'
-            : group.choices.length > 0
-              ? 'Compose…'
-              : 'Compose a trade…',
-        ],
-      }),
-    );
-  }
-
-  const heading = buttons.length > 1 ? [text('h3', 'sub', group.note)] : [];
-  return h('div', {
-    attrs: { class: 'group' },
-    children: [...heading, h('div', { attrs: { class: 'btns' }, children: buttons })],
   });
 }
 

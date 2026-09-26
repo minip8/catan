@@ -71,6 +71,8 @@ export class App {
   private menu = false;
   /** Whether every legal spot is lit, rather than only the one under the pointer. Opt-in. */
   private spots = false;
+  /** A development card in hand whose ways of being played are on show. */
+  private dev: string | null = null;
 
   constructor(root: HTMLElement, table: Table, on: AppHandlers) {
     this.root = root;
@@ -83,6 +85,7 @@ export class App {
       this.draft = null;
       this.group = null;
       this.menu = false;
+      this.dev = null;
       this.table.dismiss();
       this.render();
     });
@@ -100,6 +103,7 @@ export class App {
       this.at = snap.at;
       // A spot's menu is about a moment. Once the game has moved on, so has the moment.
       this.choice = null;
+      this.dev = null;
     }
     // A selected group and an open composer are UI state about an *offer*. Keep them only while
     // the engine is still making it.
@@ -119,6 +123,7 @@ export class App {
       choice: this.choice,
       menu: this.menu,
       spots: this.spots,
+      dev: this.dev,
       lines: snap.events.map((event) => narrate(snap.view, event)),
       notice: this.table.notice,
       watching: this.watching,
@@ -241,6 +246,12 @@ export class App {
         this.menu = false;
         this.render();
       },
+      pickDev: (card) => {
+        this.dev = card;
+        this.draft = null;
+        this.menu = false;
+        this.render();
+      },
       toggleSpots: () => {
         this.spots = !this.spots;
         this.render();
@@ -262,6 +273,7 @@ export class App {
       compose: (group, seed) => {
         this.draft = draftFor(group, seed);
         this.menu = false;
+        this.dev = null;
         this.table.dismiss();
         this.render();
       },

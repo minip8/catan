@@ -133,7 +133,8 @@ describe('App', () => {
     playOpening(root);
     click(button(root, 'Roll the dice'));
 
-    const buy = button(root, 'Buy a development card');
+    // Bought from the Build menu's price list, where it is a tile like any piece.
+    const buy = button(root, 'Development card');
     expect(buy).toBeDefined();
     click(buy);
 
@@ -151,7 +152,8 @@ describe('App', () => {
 
     // A trade offer is any bundle for any bundle, so the engine offers the *shape* and the client
     // builds the action. This is the only path in the app that does that.
-    click(button(root, 'Compose'));
+    // Composed from the hand: clicking a card opens the tray with it on the give side.
+    click(root.querySelector('.card-pick'));
     expect(root.querySelectorAll('.stepper-row')).toHaveLength(2);
     expect(root.textContent).toContain('You give');
     expect(root.textContent).toContain('You want');
@@ -184,17 +186,24 @@ describe('App', () => {
     expect(root.querySelector('.tray')).toBeNull();
   });
 
-  it('keeps the menu out of the way until it is asked for', () => {
+  it('keeps the Build menu out of the way until it is asked for', () => {
     const { root } = mount();
     playOpening(root);
+    // Rolling is a move of its own, on the bar; there is nothing to buy yet.
+    expect(root.querySelector('.btn-menu')).toBeNull();
+    click(button(root, 'Roll the dice'));
+
     const menu = root.querySelector<HTMLElement>('#action-menu');
     expect(menu?.hidden).toBe(true);
-
     click(root.querySelector('.btn-menu'));
     expect(root.querySelector<HTMLElement>('#action-menu')?.hidden).toBe(false);
+    // The price list shows every piece, bought or not.
+    expect(texts(root, '.shop-name')).toEqual(
+      expect.arrayContaining(['Road', 'Settlement', 'City', 'Development card']),
+    );
 
-    // Playing a move from it puts it away again.
-    click(button(root, 'Roll the dice'));
+    // Playing a move puts it away again.
+    click(button(root, 'End turn'));
     expect(root.querySelector<HTMLElement>('#action-menu')?.hidden).toBe(true);
   });
 

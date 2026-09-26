@@ -892,6 +892,41 @@ select {
   opacity: 0.28;
 }
 
+/* A piece the player cannot afford: there to be priced, greyed so it plainly will not buy. */
+.pop-poor {
+  cursor: not-allowed;
+}
+
+.pop-poor .pop-piece {
+  filter: grayscale(1);
+  opacity: 0.5;
+}
+
+.pop-poor:hover .pop-hit,
+.pop-poor:focus-visible .pop-hit {
+  fill: rgb(0 0 0 / 5%);
+}
+
+/* The reply to clicking one: a short no-shake, rather than a message. */
+.pop-shake {
+  animation: pop-shake 320ms ease-in-out;
+}
+
+@keyframes pop-shake {
+  0%,
+  100% {
+    transform: translateX(0);
+  }
+  20%,
+  60% {
+    transform: translateX(-4px);
+  }
+  40%,
+  80% {
+    transform: translateX(4px);
+  }
+}
+
 /* ── Players ────────────────────────────────────────────────────────────────────────────── */
 
 .players {

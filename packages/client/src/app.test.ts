@@ -218,7 +218,7 @@ describe('App', () => {
     expect(button(root, 'End turn')).toBeDefined();
   });
 
-  it('prices a spot on the board, and lets the engine refuse what the player cannot pay', () => {
+  it('prices a spot on the board, and will not buy what the player cannot pay for', () => {
     const { root } = mount();
     playOpening(root);
     click(button(root, 'Roll the dice'));
@@ -236,11 +236,11 @@ describe('App', () => {
     expect(option?.classList.contains('pop-poor')).toBe(true);
     expect(root.querySelectorAll('.pieces .piece').length).toBe(pieces);
 
-    // Buying from it goes to the engine, which says no.
+    // Clicking it shakes the bubble and nothing else: no build, no error message.
     click(option);
     expect(root.querySelectorAll('.pieces .piece').length).toBe(pieces);
-    expect(root.querySelector('.notice')?.textContent ?? '').not.toBe('');
-    expect(root.querySelector('.build-pop')).toBeNull();
+    expect(root.querySelector('.notice')).toBeNull();
+    expect(root.querySelector('.build-pop')?.classList.contains('pop-shake')).toBe(true);
   });
 
   it('keeps the board clickable across re-renders', () => {

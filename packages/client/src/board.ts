@@ -676,9 +676,10 @@ function targetGroup(
 
 /**
  * A speech bubble over a spot holding what could be bought there: the piece, in the buyer's
- * colour, over its price as little cards. Cards the player does not hold are faded — the popup
- * shows a purchase the player cannot afford rather than hiding it, and the engine refuses it if
- * clicked.
+ * colour, over its price as little cards. Cards the player does not hold are faded, and a piece
+ * the player cannot afford is greyed — shown rather than hidden, so the player learns the price.
+ * Clicking a greyed piece shakes the bubble and sends nothing: the engine has already said, by not
+ * offering it, that it would refuse.
  */
 function popGroup(
   pop: Pop,
@@ -714,7 +715,7 @@ function popGroup(
     'Z',
   ].join(' ');
 
-  return s('g', {
+  const bubbleGroup = s('g', {
     attrs: { class: 'build-pop' },
     children: [
       s('path', { attrs: { class: 'pop-bubble', d: bubble } }),
@@ -738,13 +739,13 @@ function popGroup(
           on: {
             click: (event) => {
               event.stopPropagation();
-              handlers.onPurchase?.(option.action);
+              buy(option);
             },
             keydown: (event) => {
               const key = (event as KeyboardEvent).key;
               if (key !== 'Enter' && key !== ' ') return;
               event.preventDefault();
-              handlers.onPurchase?.(option.action);
+              buy(option);
             },
           },
           children: [
@@ -784,4 +785,19 @@ function popGroup(
       }),
     ],
   });
+
+  // Straight on the live element rather than through a render: the shake is the whole reply to
+  // the click, and a render would replace the bubble mid-shake. Removing and re-adding the class
+  // (with a reflow between) restarts it on a second click.
+  function buy(option: PopOption): void {
+    if (option.affordable) {
+      handlers.onPurchase?.(option.action);
+      return;
+    }
+    bubbleGroup.classList.remove('pop-shake');
+    void bubbleGroup.getBoundingClientRect();
+    bubbleGroup.classList.add('pop-shake');
+  }
+
+  return bubbleGroup;
 }

@@ -122,10 +122,23 @@ export function affordances(ctx: RuleContext, specs: readonly ActionSpec[]): Aff
   return { groups, targets };
 }
 
-/** The targets the board should show: everything, or one group's worth. */
+/**
+ * The group whose spots show before anyone asks: the only thing on offer, when it is a placement.
+ *
+ * The opening and the robber offer nothing *but* a spot, so making the player ask to see them
+ * would be a click that decides nothing. Anywhere else — a turn with roads, settlements and a roll
+ * all on offer — spots are noise until the player says which kind they want.
+ */
+export function defaultGroup(affordances: Affordances): string | null {
+  const [only, ...rest] = affordances.groups;
+  return only !== undefined && rest.length === 0 && only.placements.length > 0 ? only.key : null;
+}
+
+/** The targets the board should show: the selected group's, the default group's, or none. */
 export function visibleTargets(affordances: Affordances, group: string | null): readonly Target[] {
-  if (group === null) return affordances.targets;
+  const shown = group ?? defaultGroup(affordances);
+  if (shown === null) return [];
   return affordances.targets
-    .map((target) => ({ ...target, options: target.options.filter((o) => o.group === group) }))
+    .map((target) => ({ ...target, options: target.options.filter((o) => o.group === shown) }))
     .filter((target) => target.options.length > 0);
 }

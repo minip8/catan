@@ -114,12 +114,24 @@ describe('visibleTargets', () => {
     const affs = affordances(f.ctx, specs);
     const first = affs.groups[0]?.key ?? null;
 
-    expect(visibleTargets(affs, null)).toHaveLength(2);
-    expect(visibleTargets(affs, null)[0]?.options).toHaveLength(2);
+    // Two kinds on offer: nothing shows until the player picks one.
+    expect(visibleTargets(affs, null)).toEqual([]);
 
     const filtered = visibleTargets(affs, first);
     expect(filtered).toHaveLength(2);
     expect(filtered.every((t) => t.options.length === 1)).toBe(true);
     expect(filtered.every((t) => t.options[0]?.action.type === 'a')).toBe(true);
+  });
+
+  it('shows the spots unasked when a placement is all that is on offer', () => {
+    const f = fixture();
+    const hexes = f.ctx.topology.hexes.slice(0, 2);
+    const affs = affordances(f.ctx, [
+      spec(
+        'a',
+        hexes.map((hex) => ({ type: 'a', hex })),
+      ),
+    ]);
+    expect(visibleTargets(affs, null)).toHaveLength(2);
   });
 });

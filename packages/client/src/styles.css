@@ -873,7 +873,10 @@ select {
   fill: rgb(47 127 209 / 16%);
 }
 
-.pop-option:focus-visible {
+/* The browser's focus box drew a hard black rectangle round the piece after a click. The tinted
+   hit area above already shows keyboard focus, so the outline goes, for the spots too. */
+.pop-option:focus,
+.target:focus {
   outline: none;
 }
 
@@ -882,14 +885,28 @@ select {
 }
 
 .pop-card {
-  stroke: rgb(0 0 0 / 35%);
-  stroke-width: 0.8;
   pointer-events: none;
 }
 
-/* A card of the price the player does not hold. */
-.pop-card-missing {
-  opacity: 0.28;
+.pop-card-face {
+  stroke: #fff;
+  stroke-width: 1.5;
+  filter: drop-shadow(0 1px 1px rgb(0 0 0 / 30%));
+}
+
+/* A card of the price the player does not hold yet: an empty dashed slot with a faint grey
+   picture, in its place in the row. A slot rather than a dimmed card, because some resources
+   (ore) are grey to begin with and would not read as missing. */
+.pop-card-missing .pop-card-face {
+  fill: #ebe7de;
+  stroke: #b3ab9b;
+  stroke-dasharray: 3 2;
+  filter: none;
+}
+
+.pop-card-missing > g {
+  filter: grayscale(1);
+  opacity: 0.35;
 }
 
 /* A piece the player cannot afford: there to be priced, greyed so it plainly will not buy. */

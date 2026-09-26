@@ -689,10 +689,14 @@ function popGroup(
 ): SVGElement {
   // Drawn half again larger than a tile's own furniture: it is read, not glanced at.
   const u = size * 1.5;
-  const cell = u * 0.78;
   const pad = u * 0.08;
-  const width = pop.options.length * cell + pad * 2;
-  const height = u * 0.82;
+  const card = { w: u * 0.17, h: u * 0.23, gap: u * 0.035 };
+  const rowOf = (option: PopOption): number =>
+    option.cost.length * card.w + Math.max(0, option.cost.length - 1) * card.gap;
+  // Each option as wide as its price needs, and never narrower than its piece.
+  const cells = pop.options.map((option) => Math.max(u * 0.78, rowOf(option) + u * 0.16));
+  const width = cells.reduce((a, b) => a + b, 0) + pad * 2;
+  const height = u * 0.98;
   const tail = u * 0.14;
   const left = at.x - width / 2;
   const top = at.y - size * 0.22 - tail - height;
@@ -715,17 +719,18 @@ function popGroup(
     'Z',
   ].join(' ');
 
+  let x0 = left + pad;
   const bubbleGroup = s('g', {
     attrs: { class: 'build-pop' },
     children: [
       s('path', { attrs: { class: 'pop-bubble', d: bubble } }),
       ...pop.options.map((option, i) => {
-        const cx = left + pad + cell * (i + 0.5);
-        const cardW = u * 0.12;
-        const cardH = u * 0.16;
-        const gap = u * 0.025;
-        const row = option.cost.length * cardW + (option.cost.length - 1) * gap;
-        const shapes = shapeFor(option.kind, u * 0.8, pop.color);
+        const cell = cells[i] ?? u * 0.78;
+        const cx = x0 + cell / 2;
+        const cellLeft = x0;
+        x0 += cell;
+        const row = rowOf(option);
+        const shapes = shapeFor(option.kind, u * 0.72, pop.color);
         const halo = shapes[0]?.cloneNode(false) as SVGElement | undefined;
         halo?.setAttribute('class', 'halo');
         const tilt = option.kind === 'road' ? ' rotate(-30)' : '';
@@ -753,7 +758,7 @@ function popGroup(
             s('rect', {
               attrs: {
                 class: 'pop-hit',
-                x: cx - cell / 2 + pad * 0.3,
+                x: cellLeft + pad * 0.3,
                 y: top + pad * 0.5,
                 width: cell - pad * 0.6,
                 height: height - pad,
@@ -763,23 +768,41 @@ function popGroup(
             s('g', {
               attrs: {
                 class: 'piece pop-piece',
-                transform: `translate(${cx.toFixed(1)} ${(top + height * 0.4).toFixed(1)})${tilt}`,
+                transform: `translate(${cx.toFixed(1)} ${(top + height * 0.36).toFixed(1)})${tilt}`,
               },
               children: halo === undefined ? shapes : [halo, ...shapes],
             }),
-            ...option.cost.map((card, j) =>
-              s('rect', {
-                attrs: {
-                  class: `pop-card${card.held ? '' : ' pop-card-missing'}`,
-                  x: cx - row / 2 + j * (cardW + gap),
-                  y: top + height * 0.72,
-                  width: cardW,
-                  height: cardH,
-                  rx: cardW * 0.18,
-                  fill: cardStyle(card.kind).color,
-                },
-              }),
-            ),
+            // The price, card by card: the ones in hand in full colour, the ones still missing
+            // greyed, so the player sees at a glance how far off they are.
+            ...option.cost.map((c, j) => {
+              const x = cx - row / 2 + j * (card.w + card.gap);
+              const y = top + height * 0.66;
+              const art = glyph(c.kind);
+              return s('g', {
+                attrs: { class: `pop-card${c.held ? '' : ' pop-card-missing'}` },
+                children: [
+                  s('rect', {
+                    attrs: {
+                      class: 'pop-card-face',
+                      x,
+                      y,
+                      width: card.w,
+                      height: card.h,
+                      rx: card.w * 0.16,
+                      fill: cardStyle(c.kind).color,
+                    },
+                  }),
+                  art === null
+                    ? null
+                    : s('g', {
+                        attrs: {
+                          transform: `translate(${(x + card.w / 2).toFixed(1)} ${(y + card.h / 2).toFixed(1)}) scale(${((card.w * 0.8) / 24).toFixed(3)})`,
+                        },
+                        children: art,
+                      }),
+                ],
+              });
+            }),
           ],
         });
       }),

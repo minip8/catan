@@ -151,7 +151,7 @@ export class App {
                     attrs: { class: 'turn-dock' },
                     children: [actionsPanel(ui, on), turnBar(ui, on)],
                   }),
-                  handPanel(ui),
+                  handPanel(ui, on),
                 ],
               }),
             ],
@@ -214,7 +214,12 @@ export class App {
 
   private handlers(): Handlers {
     return {
-      act: (action) => this.send(action),
+      act: (action) => {
+        // Any other move — a bank trade picked in the tray, a build from the menu — ends the
+        // composition. Only submitting it keeps it, so a refused offer can be fixed and resent.
+        this.draft = null;
+        this.send(action);
+      },
       selectGroup: (group) => {
         this.group = group;
         this.choice = null;
@@ -223,13 +228,9 @@ export class App {
         this.render();
       },
       toggleMenu: () => {
-        const open = this.menu || this.draft !== null || this.choice !== null;
+        const open = this.menu || this.choice !== null;
         this.menu = !open;
-        if (open) {
-          this.draft = null;
-          this.choice = null;
-          this.table.dismiss();
-        }
+        if (open) this.choice = null;
         this.render();
       },
       watch: (watching) => {
@@ -240,8 +241,9 @@ export class App {
         this.menu = false;
         this.render();
       },
-      compose: (group) => {
-        this.draft = draftFor(group);
+      compose: (group, seed) => {
+        this.draft = draftFor(group, seed);
+        this.menu = false;
         this.table.dismiss();
         this.render();
       },
@@ -345,16 +347,23 @@ function actorsOf(view: PlayerView): readonly PlayerId[] {
  * at all. The suggestion attached to a discard is used as the starting point, so the common case
  * is one click.
  */
-function draftFor(group: { key: string; type: string; choices: readonly Action[] }): Draft {
+function draftFor(
+  group: { key: string; type: string; choices: readonly Action[] },
+  seed?: string,
+): Draft {
   const suggestion = group.choices[0];
   const cards = asBundle(suggestion?.cards);
   const required = suggestion === undefined ? null : sum(cards);
+  const discarding = group.type === 'discard';
+  // A card clicked in hand is the start of the draft. Without one, a discard starts from the
+  // engine's suggestion, so the common case is still one click.
+  const give = seed !== undefined ? { [seed]: 1 } : discarding ? cards : {};
   return {
     group: group.key,
     type: group.type,
-    give: group.type === 'discard' ? cards : {},
+    give,
     want: {},
-    required: group.type === 'discard' ? required : null,
+    required: discarding ? required : null,
   };
 }
 

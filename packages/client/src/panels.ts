@@ -90,7 +90,8 @@ export interface Handlers {
   readonly act: (action: Action) => void;
   readonly selectGroup: (group: string | null) => void;
   readonly watch: (watching: Watching) => void;
-  readonly compose: (group: Group) => void;
+  /** Open a composer for `group`, optionally with one `seed` card already on the give side. */
+  readonly compose: (group: Group, seed?: CardKind) => void;
   readonly editDraft: (draft: Draft) => void;
   readonly submitDraft: () => void;
   readonly cancelDraft: () => void;
@@ -313,16 +314,35 @@ function stat(kind: string, n: number, title: string): HTMLElement {
 
 // ── Hand ────────────────────────────────────────────────────────────────────────────────────
 
-export function handPanel(ui: Ui): HTMLElement {
+/**
+ * The hand, and the tray that opens above it.
+ *
+ * When the player could trade or owes a discard, the resource cards are buttons: clicking one
+ * starts that composition with the card on the give side, and clicking more adds more. That is
+ * the gesture a card table teaches — you reach for the cards you mean to part with — and it puts
+ * the composer directly above the cards it is made of.
+ */
+export function handPanel(ui: Ui, on: Handlers): HTMLElement {
   if (ui.seat === null) {
     return panel('Hand', [text('p', 'muted', 'Spectators hold no cards.')]);
   }
   const player = ui.view.players[ui.seat];
   if (player === undefined) return panel('Hand', [text('p', 'muted', 'No such seat.')]);
 
+  const tray = trayGroup(ui);
+  const held = (kind: string): number => player.cards[kind] ?? 0;
+  const pick =
+    tray === null
+      ? null
+      : (kind: CardKind): void => {
+          const draft = ui.draft;
+          if (draft === null) on.compose(tray, kind);
+          else on.editDraft({ ...draft, give: adjust(draft.give, kind, 1, 0, held(kind)) });
+        };
+
   const resources = Object.entries(player.cards)
     .filter(([, n]) => n > 0)
-    .map(([kind, n]) => cardChip(kind, n));
+    .map(([kind, n]) => cardChip(kind, n, pick === null ? undefined : () => pick(kind)));
 
   const cards = Object.values(player.hands)
     .flat()
@@ -335,7 +355,19 @@ export function handPanel(ui: Ui): HTMLElement {
     text('li', 'dev dev-revealed', cardDefName(ui.view.cardInstances[id]?.def ?? null)),
   );
 
-  return panel('Hand', [
+  const hint =
+    tray === null || resources.length === 0
+      ? []
+      : [
+          text(
+            'p',
+            'hand-hint',
+            tray.type === 'discard' ? 'Click cards to discard them' : 'Click a card to trade it',
+          ),
+        ];
+
+  const section = panel('Hand', [
+    ...hint,
     h('div', {
       attrs: { class: 'hand' },
       children: [
@@ -349,15 +381,39 @@ export function handPanel(ui: Ui): HTMLElement {
     ...(revealed.length > 0
       ? [text('h3', 'sub', 'Face up'), h('ul', { attrs: { class: 'devs' }, children: revealed })]
       : []),
+    ...(ui.draft !== null && acting(ui) ? [draftForm(ui, ui.draft, on)] : []),
   ]);
+  return section;
+}
+
+/**
+ * What clicking a card in hand composes, if anything. A discard owed comes first — it is the only
+ * thing the step allows — and otherwise a trade: an offer to the table if the engine takes one,
+ * or a bank trade if that is all there is.
+ */
+function trayGroup(ui: Ui): Group | null {
+  if (!acting(ui)) return null;
+  const groups = ui.affordances.groups;
+  return (
+    groups.find((g) => g.type === 'discard') ??
+    groups.find((g) => !g.enumerated) ??
+    groups.find((g) => g.type === 'tradeBank') ??
+    null
+  );
 }
 
 /** A resource as a card: its art on a tint of its colour, the count in the corner. */
-function cardChip(kind: CardKind, n: number): HTMLElement {
+function cardChip(kind: CardKind, n: number, pick?: () => void): HTMLElement {
   const style = cardStyle(kind);
   const art = glyphIcon(kind, 'card-art');
-  return h('span', {
-    attrs: { class: 'card-chip', style: `--card: ${style.color}`, title: `${n} ${style.label}` },
+  return h(pick === undefined ? 'span' : 'button', {
+    attrs: {
+      class: `card-chip${pick === undefined ? '' : ' card-pick'}`,
+      style: `--card: ${style.color}`,
+      title: `${n} ${style.label}`,
+      type: pick === undefined ? null : 'button',
+    },
+    on: pick === undefined ? {} : { click: pick },
     children: [
       art ?? text('span', 'card-art card-letter', style.label.charAt(0)),
       text('span', 'card-name', style.label),
@@ -380,12 +436,11 @@ export function bankPanel(ui: Ui): HTMLElement {
 // ── Actions ─────────────────────────────────────────────────────────────────────────────────
 
 /**
- * Whether the action menu is up. The player pulls it up; the game only forces it open when the
- * player is already mid-way through something that lives there — a composer they opened, or a
- * spot they clicked that needs a second choice.
+ * Whether the action menu is up. The player pulls it up; the game only forces it open for a spot
+ * they clicked that needs a second choice. Composers live in the tray over the hand instead.
  */
 function menuOpen(ui: Ui): boolean {
-  return ui.menu || ui.draft !== null || ui.choice !== null;
+  return ui.menu || ui.choice !== null;
 }
 
 /** Can the viewer act right now? Everything the menu offers hangs off this. */
@@ -420,7 +475,7 @@ export function turnBar(ui: Ui, on: Handlers): HTMLElement {
   if (ui.notice !== null && ui.ready) lines.push(text('p', 'notice', ui.notice));
 
   const open = menuOpen(ui);
-  const offered = ui.affordances.groups.length;
+  const offered = menuGroups(ui).length;
   return h('div', {
     attrs: { class: 'turn-bar' },
     children: [
@@ -467,15 +522,23 @@ export function actionsPanel(ui: Ui, on: Handlers): HTMLElement {
     }
     if (ui.view.outcome !== null) return [text('p', 'muted', 'The game is over.')];
     if (!acting(ui)) return [text('p', 'muted', prompt(ui))];
-    if (ui.draft !== null) return [draftForm(ui, ui.draft, on)];
     if (ui.choice !== null) return [choiceBlock(ui, ui.choice, on)];
-    return ui.affordances.groups.map((group) => groupBlock(ui, group, on));
+    return menuGroups(ui).map((group) => groupBlock(ui, group, on));
   })();
 
   const section = panel('Actions', body);
   section.id = 'action-menu';
   if (!menuOpen(ui) || !acting(ui)) section.hidden = true;
   return section;
+}
+
+/**
+ * The groups the menu lists. Bank trades are made in the trade tray, where they appear as soon as
+ * the cards match one, so when the table can also be offered a trade one entry covers both.
+ */
+function menuGroups(ui: Ui): readonly Group[] {
+  const offer = ui.affordances.groups.some((g) => !g.enumerated && g.type !== 'discard');
+  return ui.affordances.groups.filter((group) => !(offer && group.type === 'tradeBank'));
 }
 
 /**
@@ -532,7 +595,17 @@ function groupBlock(ui: Ui, group: Group, on: Handlers): HTMLElement {
     );
   }
 
-  for (const action of group.choices) {
+  if (group.type === 'tradeBank') {
+    buttons.push(
+      h('button', {
+        attrs: { class: 'btn', type: 'button' },
+        on: { click: () => on.compose(group) },
+        children: ['Trade with the bank…'],
+      }),
+    );
+  }
+
+  for (const action of group.type === 'tradeBank' ? [] : group.choices) {
     buttons.push(
       h('button', {
         attrs: { class: 'btn', type: 'button' },
@@ -547,7 +620,13 @@ function groupBlock(ui: Ui, group: Group, on: Handlers): HTMLElement {
       h('button', {
         attrs: { class: 'btn btn-compose', type: 'button' },
         on: { click: () => on.compose(group) },
-        children: [group.choices.length > 0 ? 'Choose different cards…' : 'Compose…'],
+        children: [
+          group.type === 'discard'
+            ? 'Choose different cards…'
+            : group.choices.length > 0
+              ? 'Compose…'
+              : 'Compose a trade…',
+        ],
       }),
     );
   }
@@ -583,9 +662,37 @@ function draftForm(ui: Ui, draft: Draft, on: Handlers): HTMLElement {
     ? kindsWhere(ui.ctx.rules, (m) => m.countsTowardHandLimit)
     : kindsWhere(ui.ctx.rules, (m) => m.tradeable);
 
+  // The bank's offers, read two ways: the best rate per card (a hint on the give side), and any
+  // offer that is exactly the bundles on the table (a button). The client computes no rate of its
+  // own — a harbour it has never heard of still shows up, because the engine offered it.
+  const bank = ui.affordances.groups.find((g) => g.type === 'tradeBank')?.choices ?? [];
+  const rates = new Map<string, number>();
+  for (const choice of bank) {
+    const give = Object.entries(asCounts(choice.give));
+    const only = give.length === 1 ? give[0] : undefined;
+    if (only === undefined) continue;
+    const [kind, n] = only;
+    rates.set(kind, Math.min(rates.get(kind) ?? n, n));
+  }
+  const matches = discarding
+    ? []
+    : bank.filter(
+        (choice) =>
+          sameBundle(asCounts(choice.give), draft.give) &&
+          sameBundle(asCounts(choice.want), draft.want),
+      );
+
   const rows = [
-    stepperRow(discarding ? 'Discard' : 'You give', kinds, draft.give, (kind, delta) =>
-      on.editDraft({ ...draft, give: adjust(draft.give, kind, delta, 0, held(kind)) }),
+    stepperRow(
+      discarding ? 'Discard' : 'You give',
+      kinds,
+      draft.give,
+      (kind, delta) =>
+        on.editDraft({ ...draft, give: adjust(draft.give, kind, delta, 0, held(kind)) }),
+      (kind) => {
+        const rate = rates.get(kind);
+        return `${held(kind)} in hand${rate === undefined || discarding ? '' : ` · ${rate}:1`}`;
+      },
     ),
   ];
   if (!discarding) {
@@ -600,27 +707,50 @@ function draftForm(ui: Ui, draft: Draft, on: Handlers): HTMLElement {
     draft.required === null
       ? sum(draft.give) > 0 && (discarding || sum(draft.want) > 0)
       : total === draft.required;
+  // A bank-only composer has nobody to offer to; its only way out is a matching bank trade.
+  const offering = discarding || draft.type !== 'tradeBank';
 
   return h('div', {
-    attrs: { class: 'draft' },
+    attrs: { class: 'tray', role: 'dialog', 'aria-label': discarding ? 'Discard' : 'Trade' },
     children: [
-      text(
-        'p',
-        'draft-head',
-        draft.required === null
-          ? `Offering ${bundleText(draft.give as Cost)} for ${bundleText(draft.want as Cost)}`
-          : `${total} of ${draft.required} cards chosen`,
-      ),
+      h('div', {
+        attrs: { class: 'tray-top' },
+        children: [
+          text('h3', 'tray-title', discarding ? 'Discard' : 'Trade'),
+          text(
+            'p',
+            'draft-head',
+            draft.required !== null
+              ? `${total} of ${draft.required} cards chosen`
+              : sum(draft.give) === 0 && sum(draft.want) === 0
+                ? 'Pick what you give and what you want'
+                : `${bundleText(draft.give as Cost)} for ${bundleText(draft.want as Cost)}`,
+          ),
+        ],
+      }),
       ...rows,
       ...(ui.notice === null ? [] : [text('p', 'notice', ui.notice)]),
       h('div', {
         attrs: { class: 'btns' },
         children: [
-          h('button', {
-            attrs: { class: 'btn btn-go', type: 'button', disabled: !ready },
-            on: { click: () => on.submitDraft() },
-            children: [discarding ? 'Discard' : 'Offer'],
-          }),
+          ...matches.map((choice) =>
+            h('button', {
+              attrs: { class: 'btn btn-go', type: 'button' },
+              on: { click: () => on.act(choice) },
+              children: [`Trade with the bank (${sum(asCounts(choice.give))}:1)`],
+            }),
+          ),
+          offering
+            ? h('button', {
+                attrs: {
+                  class: `btn ${matches.length > 0 ? '' : 'btn-go'}`,
+                  type: 'button',
+                  disabled: !ready,
+                },
+                on: { click: () => on.submitDraft() },
+                children: [discarding ? 'Discard' : 'Offer to players'],
+              })
+            : null,
           h('button', {
             attrs: { class: 'btn', type: 'button' },
             on: { click: () => on.cancelDraft() },
@@ -632,11 +762,16 @@ function draftForm(ui: Ui, draft: Draft, on: Handlers): HTMLElement {
   });
 }
 
+/**
+ * One side of a composition, as cards. Clicking the card adds one; the − and + under it are the
+ * same thing spelled out, and the only way to take one back.
+ */
 function stepperRow(
   label: string,
   kinds: readonly CardKind[],
   values: Readonly<Record<string, number>>,
   change: (kind: CardKind, delta: number) => void,
+  note?: (kind: CardKind) => string,
 ): HTMLElement {
   return h('div', {
     attrs: { class: 'stepper-row' },
@@ -644,11 +779,32 @@ function stepperRow(
       text('h4', 'sub', label),
       h('div', {
         attrs: { class: 'steppers' },
-        children: kinds.map((kind) =>
-          h('div', {
-            attrs: { class: 'stepper', style: `--card: ${cardStyle(kind).color}` },
+        children: kinds.map((kind) => {
+          const style = cardStyle(kind);
+          const n = values[kind] ?? 0;
+          return h('div', {
+            attrs: {
+              class: `stepper${n > 0 ? ' stepper-on' : ''}`,
+              style: `--card: ${style.color}`,
+            },
             children: [
-              text('span', 'stepper-name', cardStyle(kind).label),
+              h('button', {
+                attrs: {
+                  class: 'stepper-face',
+                  type: 'button',
+                  title: `Add a ${style.label}`,
+                  'aria-hidden': 'true',
+                  tabindex: -1,
+                },
+                on: { click: () => change(kind, 1) },
+                children: [
+                  glyphIcon(kind, 'card-art') ??
+                    text('span', 'card-art card-letter', style.label.charAt(0)),
+                  text('span', 'stepper-value', n),
+                ],
+              }),
+              text('span', 'stepper-name', style.label),
+              note === undefined ? null : text('span', 'stepper-note', note(kind)),
               h('div', {
                 attrs: { class: 'stepper-controls' },
                 children: [
@@ -657,7 +813,6 @@ function stepperRow(
                     on: { click: () => change(kind, -1) },
                     children: ['−'],
                   }),
-                  text('span', 'stepper-value', values[kind] ?? 0),
                   h('button', {
                     attrs: { class: 'step', type: 'button', 'aria-label': `one more ${kind}` },
                     on: { click: () => change(kind, 1) },
@@ -666,11 +821,27 @@ function stepperRow(
                 ],
               }),
             ],
-          }),
-        ),
+          });
+        }),
       }),
     ],
   });
+}
+
+/** A card bundle out of an action field, which arrives untyped. */
+function asCounts(value: unknown): Readonly<Record<string, number>> {
+  if (typeof value !== 'object' || value === null) return {};
+  const out: Record<string, number> = {};
+  for (const [kind, n] of Object.entries(value)) if (typeof n === 'number' && n > 0) out[kind] = n;
+  return out;
+}
+
+function sameBundle(
+  a: Readonly<Record<string, number>>,
+  b: Readonly<Record<string, number>>,
+): boolean {
+  const keys = new Set([...Object.keys(a), ...Object.keys(b)]);
+  return [...keys].every((k) => (a[k] ?? 0) === (b[k] ?? 0));
 }
 
 // ── Log ─────────────────────────────────────────────────────────────────────────────────────

@@ -167,6 +167,37 @@ describe('App', () => {
     expect(texts(root, '.log-line').join(' ')).toContain('Red offers');
   });
 
+  it('starts a trade from a card in hand', () => {
+    const { root } = mount();
+    playOpening(root);
+    click(button(root, 'Roll the dice'));
+
+    // Clicking a card is the whole gesture: the tray opens with that card already offered.
+    const card = root.querySelector('.card-pick');
+    const kind = card?.querySelector('.card-name')?.textContent;
+    click(card);
+    const give = root.querySelectorAll('.stepper-row')[0];
+    const chosen = [...(give?.querySelectorAll('.stepper-on .stepper-name') ?? [])];
+    expect(chosen.map((el) => el.textContent)).toEqual([kind]);
+
+    click(button(root, 'Cancel'));
+    expect(root.querySelector('.tray')).toBeNull();
+  });
+
+  it('keeps the menu out of the way until it is asked for', () => {
+    const { root } = mount();
+    playOpening(root);
+    const menu = root.querySelector<HTMLElement>('#action-menu');
+    expect(menu?.hidden).toBe(true);
+
+    click(root.querySelector('.btn-menu'));
+    expect(root.querySelector<HTMLElement>('#action-menu')?.hidden).toBe(false);
+
+    // Playing a move from it puts it away again.
+    click(button(root, 'Roll the dice'));
+    expect(root.querySelector<HTMLElement>('#action-menu')?.hidden).toBe(true);
+  });
+
   it('keeps the board clickable across re-renders', () => {
     const { root } = mount();
     click(root.querySelector('.target'));

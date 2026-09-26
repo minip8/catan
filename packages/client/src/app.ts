@@ -116,22 +116,27 @@ export class App {
         attrs: { class: 'layout' },
         children: [
           h('div', {
-            attrs: { class: 'board-wrap' },
+            attrs: { class: 'stage' },
             children: [
-              boardSvg(scene, {
-                onTarget: (locus) => this.onTarget(ui, locus),
+              h('div', {
+                attrs: { class: 'board-wrap' },
+                children: [
+                  boardSvg(scene, {
+                    onTarget: (locus) => this.onTarget(ui, locus),
+                  }),
+                ],
+              }),
+              // What you hold and what you may do, docked under the board. Actions come first in
+              // the DOM (it is the panel a keyboard user wants first); CSS puts the hand on the left.
+              h('div', {
+                attrs: { class: 'hud' },
+                children: [actionsPanel(ui, on), handPanel(ui)],
               }),
             ],
           }),
           h('div', {
             attrs: { class: 'side' },
-            children: [
-              actionsPanel(ui, on),
-              handPanel(ui),
-              playersPanel(ui),
-              bankPanel(ui),
-              logPanel(ui),
-            ],
+            children: [playersPanel(ui), bankPanel(ui), logPanel(ui)],
           }),
         ],
       }),

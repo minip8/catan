@@ -22,6 +22,7 @@ import {
 } from '@catan/core';
 
 import { h, text } from './dom.js';
+import { glyphIcon } from './icons.js';
 import { bundleText, describeAction, type Line, stepName } from './narrate.js';
 import type { Affordances, Group, Placement } from './targets.js';
 import { cardDefName, cardStyle, humanize, playerName, seatStyle } from './theme.js';
@@ -264,31 +265,55 @@ function playerRow(ui: Ui, id: PlayerId): HTMLElement {
 
   return h('li', {
     attrs: {
-      class: `player${ui.actors.includes(id) ? ' player-active' : ''}`,
+      class: `player${ui.actors.includes(id) ? ' player-active' : ''}${
+        ui.seat === id ? ' player-you' : ''
+      }`,
       style: `--seat: ${seat.color}; --ink-color: ${seat.ink}`,
     },
     children: [
+      text('span', 'player-avatar', seat.name.charAt(0)),
       h('div', {
-        attrs: { class: 'player-head' },
+        attrs: { class: 'player-body' },
         children: [
-          text('span', 'player-name', seat.name),
-          text('span', 'player-points', `${points} VP`),
+          h('div', {
+            attrs: { class: 'player-head' },
+            children: [
+              text('span', 'player-name', seat.name),
+              h('span', {
+                attrs: { class: 'player-points', title: 'Victory points' },
+                children: [text('b', 'player-vp', points), ' VP'],
+              }),
+            ],
+          }),
+          h('div', {
+            attrs: { class: 'player-stats' },
+            children: [
+              stat('stat-cards', hand, `${hand} resource card${hand === 1 ? '' : 's'}`),
+              stat('stat-dev', dev, `${dev} development card${dev === 1 ? '' : 's'}`),
+              ...awards.map((award) => text('span', 'stat stat-award', award)),
+            ],
+          }),
+          text('div', 'player-supply', supply),
         ],
       }),
-      text(
-        'div',
-        'player-stats',
-        `${hand} cards · ${dev} dev · ${awards.join(', ') || 'no awards'}`,
-      ),
-      text('div', 'player-supply', supply),
     ],
+  });
+}
+
+/** A count beside a tiny card back: the shape Colonist-style scoreboards read at a glance. */
+function stat(kind: string, n: number, title: string): HTMLElement {
+  return h('span', {
+    attrs: { class: `stat ${kind}`, title },
+    children: [h('i', { attrs: { class: 'stat-icon', 'aria-hidden': 'true' } }), String(n)],
   });
 }
 
 // ── Hand ────────────────────────────────────────────────────────────────────────────────────
 
 export function handPanel(ui: Ui): HTMLElement {
-  if (ui.seat === null) return panel('Hand', [text('p', 'muted', 'Spectators hold no cards.')]);
+  if (ui.seat === null) {
+    return panel('Hand', [text('p', 'muted', 'Spectators hold no cards.')]);
+  }
   const player = ui.view.players[ui.seat];
   if (player === undefined) return panel('Hand', [text('p', 'muted', 'No such seat.')]);
 
@@ -309,21 +334,32 @@ export function handPanel(ui: Ui): HTMLElement {
 
   return panel('Hand', [
     h('div', {
-      attrs: { class: 'chips' },
-      children: resources.length > 0 ? resources : [text('span', 'muted', 'No resources.')],
+      attrs: { class: 'hand' },
+      children: [
+        h('div', {
+          attrs: { class: 'chips' },
+          children: resources.length > 0 ? resources : [text('span', 'muted', 'No resources.')],
+        }),
+        ...(cards.length > 0 ? [h('ul', { attrs: { class: 'devs' }, children: cards })] : []),
+      ],
     }),
-    ...(cards.length > 0 ? [h('ul', { attrs: { class: 'devs' }, children: cards })] : []),
     ...(revealed.length > 0
       ? [text('h3', 'sub', 'Face up'), h('ul', { attrs: { class: 'devs' }, children: revealed })]
       : []),
   ]);
 }
 
+/** A resource as a card: its art on a tint of its colour, the count in the corner. */
 function cardChip(kind: CardKind, n: number): HTMLElement {
   const style = cardStyle(kind);
+  const art = glyphIcon(kind, 'card-art');
   return h('span', {
-    attrs: { class: 'card-chip', style: `--card: ${style.color}` },
-    children: [text('span', 'card-name', style.label), text('span', 'card-count', n)],
+    attrs: { class: 'card-chip', style: `--card: ${style.color}`, title: `${n} ${style.label}` },
+    children: [
+      art ?? text('span', 'card-art card-letter', style.label.charAt(0)),
+      text('span', 'card-name', style.label),
+      text('span', 'card-count', n),
+    ],
   });
 }
 
@@ -575,9 +611,10 @@ export function logPanel(ui: Ui): HTMLElement {
 
 // ── Shared ──────────────────────────────────────────────────────────────────────────────────
 
+/** A titled card. `panel-<title>` lets the stylesheet place and size each one. */
 function panel(title: string, children: readonly HTMLElement[]): HTMLElement {
   return h('section', {
-    attrs: { class: 'panel' },
+    attrs: { class: `panel panel-${title.toLowerCase()}` },
     children: [text('h2', 'panel-title', title), ...children],
   });
 }

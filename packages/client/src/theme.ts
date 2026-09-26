@@ -56,21 +56,24 @@ export interface TerrainStyle {
 }
 
 /**
- * Terrain fills, tuned to sit against a dark shell rather than to be bright on their own. The
- * board layers a bevel and a grain over these (see `board.ts`), both of which lighten the top of
- * every tile — so the flat colour here is deliberately a shade deeper than the tile reads.
+ * Terrain fills: bright and saturated, the way a table seen from above reads, because the shell
+ * around the board is now open water rather than a dark frame. The board lays a bevel over these
+ * (see `board.ts`) that darkens the lower edge, so the flat colour is the tile's lit face.
  */
 const TERRAIN: Readonly<Record<string, TerrainStyle>> = {
-  hills: { label: 'Hills', fill: '#a9572b' },
-  forest: { label: 'Forest', fill: '#2d6440' },
-  mountains: { label: 'Mountains', fill: '#6f727a' },
-  fields: { label: 'Fields', fill: '#cfa733' },
-  pasture: { label: 'Pasture', fill: '#7fb254' },
-  desert: { label: 'Desert', fill: '#d6c096' },
+  hills: { label: 'Hills', fill: '#d9703a' },
+  forest: { label: 'Forest', fill: '#3f8a3c' },
+  mountains: { label: 'Mountains', fill: '#9aa6b2' },
+  fields: { label: 'Fields', fill: '#f2c53d' },
+  pasture: { label: 'Pasture', fill: '#9fd158' },
+  desert: { label: 'Desert', fill: '#ecd9a0' },
 };
 
-/** The mid-tone of the water. `board.ts` grades around it; this is what a sea hex falls back to. */
-export const SEA_FILL = '#1d4d70';
+/** The water. The page itself is this sea; `board.ts` only brightens it under the island. */
+export const SEA_FILL = '#3b8fd0';
+
+/** The beach round the island and the seams between tiles. */
+export const SAND_FILL = '#f0dfae';
 
 export function terrainStyle(terrain: TerrainId | null): TerrainStyle {
   if (terrain === null) return { label: 'Unknown', fill: '#4a4a4a' };
@@ -86,11 +89,11 @@ export interface CardStyle {
 
 /** A card is the colour of the land that makes it, so a hand reads back onto the board. */
 const CARDS: Readonly<Record<string, CardStyle>> = {
-  brick: { label: 'Brick', color: '#a9572b' },
-  lumber: { label: 'Lumber', color: '#2d6440' },
-  ore: { label: 'Ore', color: '#6f727a' },
-  grain: { label: 'Grain', color: '#cfa733' },
-  wool: { label: 'Wool', color: '#7fb254' },
+  brick: { label: 'Brick', color: '#d9703a' },
+  lumber: { label: 'Lumber', color: '#3f8a3c' },
+  ore: { label: 'Ore', color: '#9aa6b2' },
+  grain: { label: 'Grain', color: '#f2c53d' },
+  wool: { label: 'Wool', color: '#9fd158' },
 };
 
 export function cardStyle(kind: CardKind): CardStyle {

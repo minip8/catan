@@ -2,8 +2,8 @@
  * The scene, as SVG.
  *
  * Mechanical by design: every position, angle and label was decided in `scene.ts`, so this file
- * only chooses shapes. The one judgement it makes is the drawing order — water, land, harbours,
- * tokens, roads, buildings, then live targets on top — because a target the player cannot see is
+ * only chooses shapes. The one judgement it makes is the drawing order — water, beach, land,
+ * harbours, tokens, roads, buildings, then live targets on top — because a target the player cannot see is
  * a spot they cannot use.
  *
  * Piece shapes are a small table with a fallback, for the same reason the theme is: `PieceKind` is
@@ -26,8 +26,9 @@
 import type { LocusId } from '@catan/core';
 
 import { s } from './dom.js';
+import { glyph } from './icons.js';
 import type { DockShape, HexShape, PieceShape, Scene, TargetShape, Token } from './scene.js';
-import { cardStyle, SEA_FILL, seatStyle, terrainStyle } from './theme.js';
+import { cardStyle, SAND_FILL, SEA_FILL, seatStyle, terrainStyle } from './theme.js';
 
 export interface BoardHandlers {
   readonly onTarget: (locus: LocusId, event: MouseEvent) => void;
@@ -45,10 +46,23 @@ export function boardSvg(scene: Scene, handlers: BoardHandlers): SVGElement {
     },
     children: [
       defs(),
-      // The water is one graded body behind everything. Sea hexes still draw (they are part of the
-      // scene, and the topology is what says where the coast is) but blend into it, so the ocean
-      // does not read as a honeycomb of blue tiles.
+      // The page is the ocean; this only brightens the shallows under the island and lays a few
+      // ripples, fading to nothing at the edge so the board has no visible frame. Sea hexes still
+      // draw (the topology is what says where the coast is) but all but vanish into it.
       s('rect', { attrs: { class: 'sea', x, y, width, height, fill: 'url(#b-sea)' } }),
+      s('rect', { attrs: { class: 'sea-ripple', x, y, width, height, fill: 'url(#b-ripple)' } }),
+      // The beach: every land tile's outline, stroked wide in sand beneath the tiles, so the island
+      // gets a coastline and the tiles a seam without any geometry of its own.
+      s('g', {
+        attrs: { class: 'shore' },
+        children: scene.hexes
+          .filter((hex) => hex.class !== 'sea')
+          .map((hex) =>
+            s('polygon', {
+              attrs: { class: 'shore-sand', points: outlineOf(hex), fill: SAND_FILL },
+            }),
+          ),
+      }),
       s('g', {
         attrs: { class: 'hexes' },
         children: scene.hexes.map((hex) => hexGroup(hex, scene.size)),
@@ -104,13 +118,21 @@ function defs(): SVGElement {
           speck(12.6, 1.4, 0.7, '#000000', '0.05'),
         ],
       }),
-      // Deeper water towards the rim, so the island sits in a basin rather than on a flat field.
+      // Shallows: lighter water round the island, clear by the rim so the page's sea shows through.
       s('radialGradient', {
-        attrs: { id: 'b-sea', cx: '0.5', cy: '0.46', r: '0.74' },
+        attrs: { id: 'b-sea', cx: '0.5', cy: '0.5', r: '0.6' },
         children: [
-          stop('0', '#2a6d99', '1'),
-          stop('0.6', '#1d4d70', '1'),
-          stop('1', '#0f2f47', '1'),
+          stop('0', '#8fd0f2', '0.55'),
+          stop('0.7', '#6bbbe8', '0.22'),
+          stop('1', '#3b8fd0', '0'),
+        ],
+      }),
+      // Ripples: two short arcs in a staggered tile. Pattern, not filter, like the grain.
+      s('pattern', {
+        attrs: { id: 'b-ripple', width: 64, height: 40, patternUnits: 'userSpaceOnUse' },
+        children: [
+          ripple('M 6 12 q 5 -4 10 0 q 5 4 10 0'),
+          ripple('M 38 32 q 5 -4 10 0 q 5 4 10 0'),
         ],
       }),
       // One lift, shared by tokens, harbour badges and pieces.
@@ -138,16 +160,46 @@ function stop(offset: string, color: string, opacity: string): SVGElement {
   });
 }
 
+function ripple(d: string): SVGElement {
+  return s('path', {
+    attrs: {
+      d,
+      fill: 'none',
+      stroke: '#ffffff',
+      'stroke-opacity': 0.16,
+      'stroke-width': 1.6,
+      'stroke-linecap': 'round',
+    },
+  });
+}
+
 function speck(cx: number, cy: number, r: number, fill: string, opacity: string): SVGElement {
   return s('circle', { attrs: { cx, cy, r, fill, 'fill-opacity': opacity } });
 }
 
 // ── Hexes ───────────────────────────────────────────────────────────────────────────────────
 
+function outlineOf(hex: HexShape): string {
+  return hex.points.map((p) => `${p.x.toFixed(1)},${p.y.toFixed(1)}`).join(' ');
+}
+
+/**
+ * Where a terrain's glyphs stand, as fractions of the hex size: a loose ring round the token, each
+ * with its own scale so the tile looks planted rather than tiled.
+ */
+const ART_SLOTS: readonly (readonly [number, number, number])[] = [
+  [-0.03, -0.6, 0.95],
+  [-0.5, -0.24, 0.8],
+  [0.48, -0.3, 0.85],
+  [-0.42, 0.38, 0.85],
+  [0.44, 0.34, 0.8],
+  [0.02, 0.62, 0.75],
+];
+
 function hexGroup(hex: HexShape, size: number): SVGElement {
   const style = terrainStyle(hex.terrain);
   const water = hex.class === 'sea';
-  const outline = hex.points.map((p) => `${p.x.toFixed(1)},${p.y.toFixed(1)}`).join(' ');
+  const outline = outlineOf(hex);
   const children: SVGElement[] = [
     s('polygon', {
       attrs: {
@@ -159,28 +211,32 @@ function hexGroup(hex: HexShape, size: number): SVGElement {
     }),
   ];
 
-  // Grain then bevel, over the same outline. Land only: the sea is meant to look flat and wet.
-  // Neither carries the `hex` class — `app.test.ts` counts one `.hex` per hex group — and both are
-  // transparent to the pointer so the tile's own tooltip and hit area survive underneath.
+  // Grain, art, then bevel, over the same outline. Land only: the sea is meant to look flat and
+  // wet. None carries the `hex` class — `app.test.ts` counts one `.hex` per hex group — and all
+  // are transparent to the pointer so the tile's own tooltip and hit area survive underneath.
   if (!water) {
     children.push(
       s('polygon', { attrs: { class: 'hex-grain', points: outline, fill: 'url(#b-grain)' } }),
+    );
+    const art = hex.terrain === null ? null : terrainArt(hex, size);
+    if (art !== null) children.push(art);
+    children.push(
       s('polygon', { attrs: { class: 'hex-sheen', points: outline, fill: 'url(#b-sheen)' } }),
     );
-  }
-
-  if (!water && hex.terrain !== null) {
-    children.push(
-      s('text', {
-        attrs: {
-          class: 'hex-label',
-          x: hex.center.x,
-          y: hex.center.y + size * 0.62,
-          'text-anchor': 'middle',
-        },
-        children: [style.label],
-      }),
-    );
+    // A terrain nobody has drawn still says what it is.
+    if (art === null && hex.terrain !== null) {
+      children.push(
+        s('text', {
+          attrs: {
+            class: 'hex-label',
+            x: hex.center.x,
+            y: hex.center.y + size * 0.62,
+            'text-anchor': 'middle',
+          },
+          children: [style.label],
+        }),
+      );
+    }
   }
 
   hex.tokens.forEach((token, index) => {
@@ -195,8 +251,26 @@ function hexGroup(hex: HexShape, size: number): SVGElement {
   return s('g', { attrs: { class: 'hex-group' }, children });
 }
 
+/** The terrain's glyph, repeated round the token. `null` when the terrain has no glyph. */
+function terrainArt(hex: HexShape, size: number): SVGElement | null {
+  const terrain = hex.terrain;
+  if (terrain === null || glyph(terrain) === null) return null;
+  const unit = size / 24;
+  return s('g', {
+    attrs: { class: 'hex-art' },
+    children: ART_SLOTS.map(([dx, dy, scale]) =>
+      s('g', {
+        attrs: {
+          transform: `translate(${(hex.center.x + dx * size).toFixed(1)} ${(hex.center.y + dy * size).toFixed(1)}) scale(${(unit * scale * 0.72).toFixed(3)})`,
+        },
+        children: glyph(terrain) ?? [],
+      }),
+    ),
+  });
+}
+
 function tokenGroup(x: number, y: number, size: number, token: Token): SVGElement {
-  const radius = size * 0.26;
+  const radius = size * 0.3;
   const pips = Array.from({ length: token.pips }, (_, i) => {
     const spacing = radius * 0.24;
     const offset = (i - (token.pips - 1) / 2) * spacing;
@@ -223,8 +297,7 @@ function tokenGroup(x: number, y: number, size: number, token: Token): SVGElemen
 // ── Harbours ────────────────────────────────────────────────────────────────────────────────
 
 function dockGroup(dock: DockShape, size: number): SVGElement[] {
-  // Each mooring is drawn twice: a dark pier under a pale plank, which is what lets a thin line
-  // stay legible over water that is now graded rather than flat.
+  // Each mooring is a plank on a darker shadow, which keeps a thin line legible over bright water.
   const out: SVGElement[] = dock.anchors.flatMap((anchor) => {
     const ends = { x1: anchor.x, y1: anchor.y, x2: dock.at.x, y2: dock.at.y };
     return [
@@ -232,37 +305,64 @@ function dockGroup(dock: DockShape, size: number): SVGElement[] {
       s('line', { attrs: { class: 'dock-line', ...ends } }),
     ];
   });
-  const label = dock.kind === null ? 'any' : cardStyle(dock.kind).label;
+
+  // The badge: a disc in the harbour's resource with its glyph, and the ratio on a pill across
+  // the bottom. A generic harbour is a pale disc with a question mark — any card will do.
+  const r = size * 0.27;
+  const style = dock.kind === null ? null : cardStyle(dock.kind);
+  const name = style === null ? 'any' : style.label;
+  const art = dock.kind === null ? null : glyph(dock.kind);
+  const pill = { w: size * 0.46, h: size * 0.22 };
+
   out.push(
     s('g', {
       attrs: { class: 'dock' },
       children: [
+        s('title', { children: [`${dock.label} harbour — ${name}`] }),
         s('circle', {
           attrs: {
             cx: dock.at.x,
             cy: dock.at.y,
-            r: size * 0.26,
+            r,
             class: 'dock-face',
-            fill: dock.kind === null ? '#e8e4dc' : cardStyle(dock.kind).color,
+            fill: style?.color ?? '#fbf7ec',
+          },
+        }),
+        art === null
+          ? s('text', {
+              attrs: {
+                x: dock.at.x,
+                y: dock.at.y - r * 0.12,
+                'text-anchor': 'middle',
+                class: 'dock-kind',
+              },
+              children: [dock.kind === null ? '?' : name],
+            })
+          : s('g', {
+              attrs: {
+                class: 'dock-art',
+                transform: `translate(${dock.at.x.toFixed(1)} ${(dock.at.y - r * 0.18).toFixed(1)}) scale(${((r * 1.2) / 24).toFixed(3)})`,
+              },
+              children: art,
+            }),
+        s('rect', {
+          attrs: {
+            x: dock.at.x - pill.w / 2,
+            y: dock.at.y + r * 0.42,
+            width: pill.w,
+            height: pill.h,
+            rx: pill.h / 2,
+            class: 'dock-pill',
           },
         }),
         s('text', {
           attrs: {
             x: dock.at.x,
-            y: dock.at.y - size * 0.02,
+            y: dock.at.y + r * 0.42 + pill.h * 0.76,
             'text-anchor': 'middle',
             class: 'dock-ratio',
           },
           children: [dock.label],
-        }),
-        s('text', {
-          attrs: {
-            x: dock.at.x,
-            y: dock.at.y + size * 0.15,
-            'text-anchor': 'middle',
-            class: 'dock-kind',
-          },
-          children: [label],
         }),
       ],
     }),
@@ -302,9 +402,9 @@ function shapeFor(kind: string, size: number, fill: string): SVGElement[] {
   }
 }
 
-/** A plank with the light catching its upper edge. */
+/** A plank with the light catching its upper edge. Slim, so it reads as a road and not a wall. */
 function road(r: number, fill: string): SVGElement[] {
-  const thickness = r * 0.4;
+  const thickness = r * 0.28;
   return [
     s('rect', {
       attrs: {

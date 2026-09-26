@@ -145,3 +145,119 @@ export function glyphIcon(name: string, className: string): SVGElement | null {
     children: shapes,
   });
 }
+
+// ── Interface icons ─────────────────────────────────────────────────────────────────────────
+//
+// The action bar and the scoreboard draw a few things that are not terrain: a trade, a turn
+// ending, dice, the bank, an army, a road. Same 24-unit box, drawn in the ink colour so they sit
+// on any tile.
+
+const INK = '#2f3f52';
+
+const line = (d: string, width = 2): SVGElement =>
+  s('path', {
+    attrs: {
+      d,
+      fill: 'none',
+      stroke: INK,
+      'stroke-width': width,
+      'stroke-linecap': 'round',
+      'stroke-linejoin': 'round',
+    },
+  });
+
+const UI: Readonly<Record<string, Draw>> = {
+  // Two arrows chasing each other round a circle.
+  trade: () => [
+    line('M -8 -2 A 8.5 8.5 0 0 1 7 -5.5'),
+    line('M 3.5 -8 L 7.4 -5.2 L 4 -1.8'),
+    line('M 8 2 A 8.5 8.5 0 0 1 -7 5.5'),
+    line('M -3.5 8 L -7.4 5.2 L -4 1.8'),
+  ],
+  hourglass: () => [
+    line('M -7 -10 H 7 M -7 10 H 7'),
+    line('M -5.5 -10 C -5.5 -3 5.5 -3 5.5 0 M 5.5 -10 C 5.5 -3 -5.5 -3 -5.5 0', 1.6),
+    line('M -5.5 10 C -5.5 3 5.5 3 5.5 0 M 5.5 10 C 5.5 3 -5.5 3 -5.5 0', 1.6),
+    s('path', { attrs: { d: 'M -4 8.8 Q 0 4 4 8.8 Z', fill: '#e0b35a' } }),
+    s('path', { attrs: { d: 'M -3.4 -6.5 H 3.4 L 0 -2.2 Z', fill: '#e0b35a' } }),
+  ],
+  dice: () =>
+    (
+      [
+        [-5, -3, [[-5, -3]]],
+        [
+          5,
+          3,
+          [
+            [3, 1],
+            [7, 5],
+          ],
+        ],
+      ] as const
+    ).flatMap(([cx, cy, pips]) => [
+      s('rect', {
+        attrs: {
+          x: cx - 5.5,
+          y: cy - 5.5,
+          width: 11,
+          height: 11,
+          rx: 2.4,
+          fill: '#fff',
+          stroke: INK,
+          'stroke-width': 1.6,
+        },
+      }),
+      ...pips.map(([px, py]) => s('circle', { attrs: { cx: px, cy: py, r: 1.4, fill: INK } })),
+    ]),
+  bank: () => [
+    s('path', { attrs: { d: 'M -11 -4 L 0 -11 L 11 -4 Z', fill: '#c9a15a', stroke: INK } }),
+    ...[-7, -2.3, 2.3, 7].map((x) =>
+      s('rect', { attrs: { x: x - 1.3, y: -3, width: 2.6, height: 10, fill: '#e8d3a2' } }),
+    ),
+    s('rect', { attrs: { x: -11, y: 7, width: 22, height: 3, fill: '#c9a15a', stroke: INK } }),
+  ],
+  // Largest Army: a shield.
+  army: () => [
+    s('path', {
+      attrs: {
+        d: 'M 0 -10 L 8 -7 V 0 C 8 6 4 9 0 11 C -4 9 -8 6 -8 0 V -7 Z',
+        fill: '#d8dde3',
+        stroke: INK,
+        'stroke-width': 1.6,
+        'stroke-linejoin': 'round',
+      },
+    }),
+    line('M 0 -6 V 7 M -4.5 -1 H 4.5', 1.6),
+  ],
+  // Longest Road: an arched run of road.
+  road: () => [
+    s('path', {
+      attrs: {
+        d: 'M -10 7 Q 0 -11 10 7',
+        fill: 'none',
+        stroke: INK,
+        'stroke-width': 5,
+        'stroke-linecap': 'round',
+      },
+    }),
+    s('path', {
+      attrs: {
+        d: 'M -10 7 Q 0 -11 10 7',
+        fill: 'none',
+        stroke: '#d8dde3',
+        'stroke-width': 2.4,
+        'stroke-dasharray': '2.5 2',
+      },
+    }),
+  ],
+};
+
+/** An interface icon by name: `trade`, `hourglass`, `dice`, `bank`, `army`, `road`. */
+export function uiIcon(name: string, className: string): SVGElement | null {
+  const draw = UI[name];
+  if (draw === undefined) return null;
+  return s('svg', {
+    attrs: { class: className, viewBox: '-12 -12 24 24', 'aria-hidden': 'true' },
+    children: draw(),
+  });
+}

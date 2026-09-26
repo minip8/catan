@@ -76,190 +76,30 @@ select {
   outline-offset: 2px;
 }
 
-/* ── Header ─────────────────────────────────────────────────────────────────────────────── */
+/* ── Table layout ───────────────────────────────────────────────────────────────────────── */
 
-.top {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.5rem 1.25rem;
-  align-items: center;
-  justify-content: space-between;
-  padding: 0.55rem 1rem;
-  background: linear-gradient(var(--bar-hi), var(--bar));
-  color: #fff;
-  box-shadow: 0 2px 10px rgb(0 20 40 / 35%);
-}
-
-.title {
-  min-width: 0;
-}
-
-.title-name {
-  margin: 0;
-  font-size: 1.35rem;
-  font-weight: 800;
-  letter-spacing: 0.14em;
-  text-transform: uppercase;
-  color: var(--accent);
-  text-shadow: 0 2px 0 rgb(0 0 0 / 30%);
-}
-
-.title-sub {
-  margin: 0;
-  color: rgb(255 255 255 / 68%);
-  font-size: 0.78rem;
-}
-
-.title-warn {
-  margin: 0.1rem 0 0;
-  color: var(--accent);
-  font-size: 0.75rem;
-}
-
-.status {
-  margin: 0;
-  font-weight: 800;
-  padding: 0.4rem 1rem;
-  border-radius: 999px;
-  background: var(--panel);
-  color: var(--ink);
-  box-shadow: var(--lift-2), var(--press);
-}
-
-.status-won {
-  background: var(--accent);
-}
-
-.seats {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.35rem;
-  align-items: center;
-}
-
-.seats-label {
-  color: rgb(255 255 255 / 60%);
-  font-size: 0.7rem;
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.1em;
-}
-
-.chip {
-  padding: 0.3rem 0.7rem;
-  border: 1px solid rgb(255 255 255 / 22%);
-  border-radius: 999px;
-  background: rgb(255 255 255 / 10%);
-  color: #fff;
-  font-weight: 600;
-  cursor: pointer;
-  transition:
-    border-color 120ms ease,
-    background-color 120ms ease;
-}
-
-.chip:hover {
-  border-color: rgb(255 255 255 / 55%);
-  background: rgb(255 255 255 / 20%);
-}
-
-.chip-seat {
-  border-left: 5px solid var(--seat);
-}
-
-/* The seat you are looking through, whether pinned or reached by following the hot seat. */
-.chip-looking,
-.chip-looking:hover {
-  background: var(--seat);
-  color: var(--ink-color, inherit);
-  border-color: #fff;
-  font-weight: 800;
-}
-
-.chip-on {
-  outline: 2px solid var(--accent);
-  outline-offset: 1px;
-}
-
-/* Who the engine is waiting on, which is not always who you are watching. */
-.chip-active::after {
-  content: ' •';
-  color: var(--accent);
-}
-
-.chip-looking.chip-active::after {
-  color: inherit;
-}
-
-.chip-select,
-.chip-new {
-  font-size: 0.85rem;
-}
-
-.chip-select {
-  padding-right: 0.4rem;
-}
-
-.chip-select option {
-  color: var(--ink);
-  background: var(--panel);
-}
-
-/* Shown while connecting, and when connecting failed. */
-.splash {
-  max-width: 32rem;
-  margin: 6rem auto;
-  padding: 1.75rem;
-  background: var(--panel);
-  border-radius: var(--r-lg);
-  box-shadow: var(--lift-2);
-  text-align: center;
-}
-
-.splash .title-name {
-  text-shadow: none;
-  color: var(--primary-deep);
-}
-
-.splash-message {
-  margin: 0.5rem 0;
-  font-size: 1.05rem;
-}
-
-/* ── Layout ─────────────────────────────────────────────────────────────────────────────── */
-
-/* One screen, no page scroll: the board takes whatever height the header and the dock leave, and
-   the right-hand column scrolls on its own. */
-#app {
+/* One screen, no page scroll, laid out like an online table: the play area on the left with the
+   board filling it and the controls floating over it, and a column down the right for the log,
+   the bank and the scoreboard. */
+.table {
   display: grid;
-  grid-template-rows: auto minmax(0, 1fr);
+  grid-template-columns: minmax(0, 1fr) 24rem;
   height: 100vh;
-}
-
-/* The board draws past its own box when dragged — under the hud and the side column, as on a
-   real table — and the layout is where that stops, so it never covers the header. */
-.layout {
   overflow: hidden;
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) 21rem;
-  gap: 1rem;
-  padding: 0.75rem 1rem 1rem;
-  min-height: 0;
 }
 
-.stage {
-  display: flex;
-  flex-direction: column;
-  gap: 0.75rem;
+.play {
+  position: relative;
   min-width: 0;
-  min-height: 0;
+  /* The board draws past its own box when dragged; this is where that stops. */
+  overflow: hidden;
 }
 
-/* The board has no frame: the page is the sea, and the island's beach is its edge. */
+/* The board's box is the play area above the hud, so the island starts clear of the bar; a drag
+   can still carry it underneath. */
 .board-wrap {
-  flex: 1 1 0;
-  min-width: 0;
-  min-height: 16rem;
+  position: absolute;
+  inset: 0 0 7.5rem;
 }
 
 .board {
@@ -279,48 +119,48 @@ select {
   cursor: grabbing;
 }
 
-/* The gaps between panels belong to the board beneath them. */
-.hud,
-.side {
-  pointer-events: none;
-}
-
-.hud > *,
-.side > * {
-  pointer-events: auto;
-}
-
-.board-wrap {
-  position: relative;
-}
-
-/* Zoom buttons float over the sea in the board's corner. */
-.zoom-controls {
+/* Visible to assistive technology only. */
+.sr-only {
   position: absolute;
-  top: 0.25rem;
-  left: 0.25rem;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+
+/* ── Rail: the round buttons top left ────────────────────────────────────────────────────── */
+
+.rail {
+  position: absolute;
+  top: 1rem;
+  left: 1rem;
+  z-index: 6;
   display: flex;
   flex-direction: column;
-  gap: 0.3rem;
+  gap: 0.5rem;
 }
 
 .zoom-btn {
-  width: 2.2rem;
-  height: 2.2rem;
-  border: 0;
-  border-radius: var(--r-md);
-  background: var(--panel);
-  color: var(--ink);
-  font-size: 1.15rem;
-  font-weight: 800;
+  display: grid;
+  place-items: center;
+  width: 2.8rem;
+  height: 2.8rem;
+  border: 2px solid #fff;
+  border-radius: 50%;
+  background: #e4edf8;
+  color: var(--sea-deep);
+  font-size: 1.3rem;
+  font-weight: 900;
   line-height: 1;
   cursor: pointer;
-  box-shadow: var(--lift-2), var(--press);
+  box-shadow: var(--lift-2);
   transition: background-color 120ms ease;
 }
 
 .zoom-btn:hover:not(:disabled) {
-  background: #e3ecf6;
+  background: #fff;
 }
 
 .zoom-on {
@@ -337,15 +177,151 @@ select {
   cursor: default;
 }
 
-/* Hand on the left, the turn dock on the right. DOM order stays dock-first. The hud is one fixed
-   height, empty hand or full: the board above it must not jump when a card arrives. Anything taller
-   — the menu, the trade tray — opens over the board instead of pushing it. */
+.rail-settings {
+  width: 3.2rem;
+  height: 3.2rem;
+  font-size: 1.7rem;
+}
+
+/* The game menu opens beside the rail. */
+.game-menu {
+  position: absolute;
+  top: 0;
+  left: 4rem;
+  width: min(26rem, calc(100vw - 6rem));
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+  padding: 1rem;
+  border-radius: var(--r-lg);
+  background: var(--panel);
+  box-shadow:
+    0 12px 32px rgb(10 30 60 / 40%),
+    0 0 0 1px var(--panel-edge);
+}
+
+.game-menu[hidden] {
+  display: none;
+}
+
+.title-name {
+  margin: 0;
+  font-size: 1.35rem;
+  font-weight: 900;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--sea-deep);
+}
+
+.title-sub {
+  margin: 0;
+  color: var(--ink-dim);
+  font-size: 0.8rem;
+}
+
+.title-warn {
+  margin: 0;
+  color: #9a6500;
+  font-size: 0.75rem;
+}
+
+.seats {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  align-items: center;
+}
+
+.seats-label {
+  width: 100%;
+  color: var(--ink-faint);
+  font-size: 0.7rem;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+}
+
+.chip {
+  padding: 0.3rem 0.7rem;
+  border: 1px solid var(--panel-edge);
+  border-radius: 999px;
+  background: var(--panel-soft);
+  color: var(--ink);
+  font-weight: 700;
+  cursor: pointer;
+  transition: background-color 120ms ease;
+}
+
+.chip:hover {
+  background: #e3ecf6;
+}
+
+.chip-seat {
+  border-left: 5px solid var(--seat);
+}
+
+/* The seat you are looking through, whether pinned or reached by following the hot seat. */
+.chip-looking,
+.chip-looking:hover {
+  background: var(--seat);
+  color: var(--ink-color, inherit);
+  font-weight: 800;
+}
+
+.chip-on {
+  outline: 2px solid var(--primary);
+  outline-offset: 1px;
+}
+
+/* Who the engine is waiting on, which is not always who you are watching. */
+.chip-active::after {
+  content: ' •';
+  color: var(--accent);
+}
+
+.chip-looking.chip-active::after {
+  color: inherit;
+}
+
+.chip-select,
+.chip-new {
+  font-size: 0.85rem;
+}
+
+/* Shown while connecting, and when connecting failed. */
+.splash {
+  max-width: 32rem;
+  margin: 6rem auto;
+  padding: 1.75rem;
+  background: var(--panel);
+  border-radius: var(--r-lg);
+  box-shadow: var(--lift-2);
+  text-align: center;
+}
+
+.splash-message {
+  margin: 0.5rem 0;
+  font-size: 1.05rem;
+}
+
+/* ── Hud: the hand along the bottom, the action bar bottom right ─────────────────────────── */
+
+/* The hud is one fixed height, empty hand or full: the board must not jump when a card arrives.
+   Anything taller — the question box, the trade tray — opens over the board instead. */
 .hud {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(17rem, 25rem);
-  grid-auto-rows: 8.75rem;
-  gap: 0.75rem;
-  flex: none;
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 5;
+  display: flex;
+  align-items: flex-end;
+  gap: 0.6rem;
+  pointer-events: none;
+}
+
+.hud > * {
+  pointer-events: auto;
 }
 
 .hud .panel-hand {
@@ -354,45 +330,73 @@ select {
 
 .turn-dock {
   position: relative;
-  min-width: 0;
-  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 0.45rem;
+  flex: none;
+  padding-right: 0.6rem;
 }
 
-.turn-bar {
+/* Who the game is waiting on, over the bar. */
+.turn-pill {
   display: flex;
   align-items: center;
-  height: 100%;
-  gap: 0.75rem;
-  padding: 0.75rem 0.85rem;
-  border-radius: var(--r-lg);
+  gap: 0.6rem;
+  max-width: 100%;
+  padding: 0.35rem 1rem 0.35rem 0.35rem;
+  border-radius: var(--r-md);
+  background: #f6f3ec;
+  box-shadow: var(--lift-2);
+}
+
+.pill-avatar {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 2rem;
+  height: 2rem;
+  border: 2px solid #fff;
+  border-radius: 50%;
+  background: var(--seat, var(--ink-faint));
+  color: var(--ink-color, #fff);
+  font-size: 0.85rem;
+  font-weight: 900;
+  box-shadow: 0 0 0 1px rgb(0 0 0 / 18%);
+}
+
+.status {
+  margin: 0;
+  font-weight: 700;
+  color: var(--ink);
+}
+
+.status-won {
+  color: #7a5400;
+}
+
+/* The moment's question, over the pill: find a spot, pick a victim, answer an offer. */
+.turn-box {
+  width: min(26rem, calc(100vw - 2rem));
+  max-height: 40vh;
+  overflow-y: auto;
+  padding: 0.65rem 0.8rem;
+  border-radius: var(--r-md);
   background: var(--panel);
   box-shadow: var(--lift-2);
 }
 
-.turn-prompt {
-  flex: 1;
-  min-width: 0;
-  max-height: 100%;
-  overflow-y: auto;
-  scrollbar-width: thin;
-}
-
-.turn-prompt > p {
+.turn-box > p {
   margin: 0;
 }
 
-.turn-say {
-  font-weight: 800;
+.turn-box > * + * {
+  margin-top: 0.45rem;
 }
 
-.turn-prompt .turn-hint {
-  margin-top: 0.2rem;
-  font-size: 0.82rem;
+.turn-hint {
+  font-size: 0.85rem;
   color: var(--ink-dim);
-}
-
-.turn-prompt .notice {
-  margin-top: 0.4rem;
 }
 
 .link {
@@ -405,228 +409,171 @@ select {
   cursor: pointer;
 }
 
-/* Roll, end turn, accept: the moves that keep the game going sit on the bar itself. */
-.turn-btns {
+/* The action bar: square tiles standing on the bottom edge, as on Colonist. */
+.panel.panel-actions {
+  padding: 0;
+  background: none;
+  box-shadow: none;
+}
+
+.tiles {
   display: flex;
-  flex-direction: column;
-  align-items: stretch;
-  gap: 0.35rem;
-  max-height: 100%;
-  overflow-y: auto;
-  flex: none;
+  gap: 0.4rem;
 }
 
-/* The Build toggle. */
-.btn.btn-menu {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.45rem;
-  padding: 0.65rem 1.1rem 0.7rem;
-  background: var(--primary);
-  color: #fff;
-  font-size: 1rem;
-  box-shadow:
-    0 0 0 1px var(--primary-deep),
-    inset 0 -3px 0 var(--primary-deep);
-}
-
-.btn.btn-menu:hover:not(:disabled) {
-  background: #3b8de0;
-}
-
-.btn.btn-menu.btn-on {
-  background: var(--panel-soft);
-  color: var(--ink);
-  box-shadow:
-    0 0 0 1px var(--panel-edge),
-    var(--press);
-}
-
-.badge {
+.action-tile {
+  position: relative;
   display: grid;
   place-items: center;
-  min-width: 1.3rem;
-  height: 1.3rem;
-  padding: 0 0.3rem;
-  border-radius: 999px;
-  background: var(--accent);
-  color: var(--ink);
-  font-size: 0.75rem;
-  font-weight: 800;
-}
-
-/* The Build menu floats above the turn bar, over the board: a price list of tiles. */
-.shop {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 0.5rem;
-}
-
-.shop-tile {
-  display: grid;
-  grid-template-columns: 2.6rem minmax(0, 1fr);
-  grid-template-rows: auto auto;
-  column-gap: 0.55rem;
-  align-items: center;
-  padding: 0.55rem 0.6rem;
-  border: 0;
-  border-radius: var(--r-md);
-  background: var(--panel-soft);
-  color: var(--ink);
-  font: inherit;
-  text-align: left;
+  width: 4.6rem;
+  height: 4.6rem;
+  padding: 0;
+  border: 2px solid #eef4fb;
+  border-bottom: 0;
+  border-radius: 0.55rem 0.55rem 0 0;
+  background: linear-gradient(#d7e6f7, #a8c5ea);
   cursor: pointer;
-  box-shadow:
-    0 0 0 1px var(--panel-edge),
-    var(--press);
+  box-shadow: 0 -2px 8px rgb(10 30 60 / 25%);
   transition:
     background-color 120ms ease,
-    transform 80ms ease;
+    transform 80ms ease,
+    filter 120ms ease;
 }
 
-.shop-tile:hover:not(:disabled) {
-  background: #e3ecf6;
+.action-tile:hover:not(:disabled) {
+  filter: brightness(1.07);
+  transform: translateY(-2px);
 }
 
-.shop-tile:active:not(:disabled) {
-  transform: translateY(1px);
-}
-
-/* Not on offer: still a price, but plainly not a button. */
-.shop-tile:disabled {
+/* Not on offer now: still there, so nothing moves, but plainly asleep. */
+.action-tile:disabled {
   cursor: default;
-  box-shadow: 0 0 0 1px var(--panel-edge);
+  background: linear-gradient(#c7d6e8, #9fb6d3);
 }
 
-.shop-tile:disabled > * {
-  opacity: 0.45;
+.action-tile:disabled > :not(.sr-only) {
+  opacity: 0.4;
 }
 
-.shop-on {
-  background: #e3efff;
-  box-shadow:
-    0 0 0 2px var(--primary),
-    var(--press);
+/* Its spots are what the board is showing. */
+.tile-on {
+  background: linear-gradient(#fff6d6, #f2d27a);
+  border-color: #fff;
 }
 
-.shop-icon {
-  grid-row: span 2;
-  width: 2.6rem;
-  height: 2.6rem;
+/* The move the bar is waiting for: the roll, the end of the turn. */
+.tile-go:not(:disabled) {
+  background: linear-gradient(#fff3c9, #f4c95b);
+}
+
+.tile-icon {
+  width: 2.9rem;
+  height: 2.9rem;
   overflow: visible;
 }
 
 /* A development card, face down. */
-.shop-card {
+.tile-dev {
   display: block;
-  width: 1.9rem;
-  height: 2.6rem;
-  margin: 0 auto;
+  width: 2rem;
+  height: 2.8rem;
   border: 2px solid #fff;
   border-radius: 0.35rem;
   background:
-    radial-gradient(circle at 50% 40%, rgb(255 255 255 / 35%) 0 0.35rem, transparent 0.4rem),
+    radial-gradient(circle at 50% 42%, rgb(255 255 255 / 35%) 0 0.4rem, transparent 0.45rem),
     linear-gradient(var(--dev), var(--dev-deep));
-  box-shadow:
-    0 0 0 1px var(--dev-deep),
-    var(--lift-1);
+  box-shadow: 0 0 0 1px var(--dev-deep);
 }
 
-.shop-body {
-  display: flex;
-  flex-direction: column;
-  gap: 0.2rem;
-  min-width: 0;
-}
-
-.shop-name {
-  font-weight: 800;
-  font-size: 0.9rem;
-}
-
-.shop-cost {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.15rem;
-}
-
-/* One resource of a price: a tiny card with its glyph. */
-.cost-card {
-  display: grid;
-  place-items: center;
-  width: 1.25rem;
-  height: 1.65rem;
-  border-radius: 0.22rem;
-  background: color-mix(in srgb, var(--card) 45%, #fff);
-  box-shadow: 0 0 0 1px color-mix(in srgb, var(--card) 70%, #000);
-  font-size: 0.6rem;
-  font-weight: 800;
-}
-
-.cost-art {
-  width: 1.05rem;
-  height: 1.05rem;
-}
-
-.shop-meta {
-  grid-column: 2;
-  font-size: 0.7rem;
-  font-weight: 700;
-  color: var(--ink-faint);
-}
-
-
-.panel-actions {
+.tile-count {
   position: absolute;
-  right: 0;
-  bottom: calc(100% + 0.6rem);
-  z-index: 5;
-  width: min(25rem, calc(100vw - 2rem));
-  max-height: min(60vh, 34rem);
-  overflow-y: auto;
-  scrollbar-width: thin;
-  box-shadow:
-    0 12px 32px rgb(10 40 70 / 38%),
-    0 0 0 1px var(--panel-edge);
+  top: 0.2rem;
+  right: 0.35rem;
+  font-size: 0.8rem;
+  font-weight: 900;
+  color: #fff;
+  text-shadow: 0 1px 2px rgb(0 0 0 / 55%);
 }
 
-.panel-actions[hidden] {
-  display: none;
-}
+/* ── Side column ────────────────────────────────────────────────────────────────────────── */
 
 .side {
   display: flex;
   flex-direction: column;
-  gap: 0.75rem;
-  min-width: 0;
+  gap: 0.5rem;
   min-height: 0;
-  overflow-y: auto;
-  /* Room for the panels' shadows, which the scroll box would otherwise clip. */
-  margin: -0.5rem;
   padding: 0.5rem;
+  background: rgb(0 20 50 / 18%);
+  overflow-y: auto;
   scrollbar-width: thin;
   scrollbar-color: rgb(255 255 255 / 35%) transparent;
 }
 
-/* Narrow screens stack everything and let the page scroll again. */
+/* The log takes whatever the column has left; the scoreboard keeps its size. */
+.side .panel-log {
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 10rem;
+  min-height: 8rem;
+}
+
+.side .panel-log .log {
+  flex: 1;
+  max-height: none;
+}
+
+/* Colonist's column carries no headings; the content says what it is. */
+.side .panel-title {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+}
+
+/* Narrow screens stack the column under the play area and let the page scroll. */
 @media (max-width: 60rem) {
-  #app {
-    display: block;
+  .table {
+    grid-template-columns: minmax(0, 1fr);
     height: auto;
+    overflow: visible;
   }
 
-  .layout,
-  .hud {
-    grid-template-columns: minmax(0, 1fr);
+  .play {
+    height: 82vh;
   }
 
   .board-wrap {
-    flex: none;
+    bottom: 13rem;
   }
 
-  .board {
-    height: auto;
-    max-height: 80vh;
+  .hud {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .hud .panel-hand {
+    order: 0;
+  }
+
+  .turn-dock {
+    align-items: stretch;
+    padding: 0 0.5rem;
+  }
+
+  .tiles {
+    justify-content: space-between;
+  }
+
+  .action-tile {
+    width: auto;
+    flex: 1;
+    height: 3.6rem;
+  }
+
+  .tile-icon {
+    width: 2.2rem;
+    height: 2.2rem;
   }
 
   .side {
@@ -635,9 +582,10 @@ select {
 }
 
 .panel {
-  background: var(--panel);
-  border-radius: var(--r-lg);
-  padding: 0.75rem 0.85rem;
+  position: relative;
+  background: #f6f3ec;
+  border-radius: var(--r-md);
+  padding: 0.6rem 0.7rem;
   box-shadow: var(--lift-2);
 }
 
@@ -667,7 +615,7 @@ select {
 }
 
 .notice {
-  margin: 0 0 0.5rem;
+  margin: 0;
   padding: 0.45rem 0.6rem;
   border-left: 4px solid var(--danger);
   border-radius: 0 var(--r-sm) var(--r-sm) 0;
@@ -910,144 +858,209 @@ select {
   padding: 0;
   display: flex;
   flex-direction: column;
-  gap: 0.45rem;
+  gap: 0.4rem;
 }
 
+/* A scoreboard row: name over avatar over score, the backs of their cards, their award tallies. */
 .player {
   display: grid;
-  grid-template-columns: 2.5rem minmax(0, 1fr);
-  gap: 0.65rem;
+  grid-template-columns: 4.4rem auto minmax(0, 1fr);
+  gap: 0.7rem;
   align-items: center;
-  padding: 0.5rem 0.6rem;
+  padding: 0.35rem 0.6rem 0.45rem;
   border: 2px solid transparent;
-  border-radius: var(--r-md);
-  background: var(--panel-soft);
-  transition:
-    background-color 150ms ease,
-    border-color 150ms ease;
+  border-radius: var(--r-sm);
+  background: linear-gradient(#e6e6e4, #d2d2cf);
 }
 
 .player-active {
   border-color: var(--seat);
-  background: color-mix(in srgb, var(--seat) 12%, var(--panel));
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--seat) 35%, transparent);
+}
+
+.player-id {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.player-name {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 0.78rem;
+  font-weight: 700;
+  color: #4d5560;
 }
 
 .player-avatar {
   display: grid;
   place-items: center;
-  width: 2.5rem;
-  height: 2.5rem;
+  width: 2.6rem;
+  height: 2.6rem;
+  border: 3px solid #fff;
   border-radius: 50%;
   background: var(--seat);
   color: var(--ink-color, #fff);
-  font-size: 1.15rem;
-  font-weight: 800;
+  font-size: 1.1rem;
+  font-weight: 900;
   box-shadow:
     inset 0 -4px 0 rgb(0 0 0 / 16%),
-    0 0 0 2px var(--panel),
-    0 0 0 3px rgb(0 0 0 / 14%);
+    0 0 0 1px rgb(0 0 0 / 25%);
 }
 
-.player-body {
-  min-width: 0;
-}
-
-.player-head {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  gap: 0.5rem;
-}
-
-.player-name {
-  font-weight: 800;
-}
-
-.player-you .player-name::after {
-  content: ' (you)';
-  color: var(--ink-faint);
-  font-weight: 600;
-  font-size: 0.8rem;
-}
-
+/* The score, on a little ribbon under the avatar. */
 .player-points {
-  padding: 0.05rem 0.55rem;
-  border-radius: 999px;
-  background: var(--ink);
-  color: #fff;
-  font-size: 0.72rem;
-  font-weight: 700;
-  white-space: nowrap;
+  position: relative;
+  margin-top: -0.45rem;
+  min-width: 1.6rem;
+  padding: 0 0.4rem;
+  border: 1px solid #a09880;
+  border-radius: 0.2rem;
+  background: #fbf8ef;
+  color: var(--ink);
+  font-size: 0.8rem;
+  text-align: center;
   font-variant-numeric: tabular-nums;
-}
-
-.player-vp {
-  font-size: 0.95rem;
 }
 
 .player-active .player-points {
   background: var(--accent);
-  color: var(--ink);
 }
 
-.player-stats {
+.player-hand {
   display: flex;
-  flex-wrap: wrap;
-  gap: 0.3rem;
-  margin-top: 0.25rem;
+  gap: 0.45rem;
 }
 
-.stat {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.3rem;
-  padding: 0.05rem 0.5rem 0.05rem 0.35rem;
-  border: 1px solid var(--panel-edge);
+/* A face-down card with its count in the corner. */
+.card-back {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: 2rem;
+  height: 2.8rem;
+  border: 2px solid #fff;
+  border-radius: 0.3rem;
+  box-shadow: 0 1px 3px rgb(0 0 0 / 30%);
+}
+
+.card-back::before {
+  color: rgb(255 255 255 / 90%);
+  font-size: 1.2rem;
+  font-weight: 900;
+}
+
+.card-back-res {
+  background: linear-gradient(#4a7fd0, #2b58a3);
+}
+
+.card-back-res::before {
+  content: '?';
+}
+
+.card-back-dev {
+  background:
+    radial-gradient(circle at 50% 50%, rgb(255 255 255 / 35%) 0 0.4rem, transparent 0.45rem),
+    linear-gradient(var(--dev), var(--dev-deep));
+}
+
+.card-back-count {
+  position: absolute;
+  top: -0.45rem;
+  right: -0.5rem;
+  min-width: 1.15rem;
+  padding: 0 0.2rem;
   border-radius: 999px;
-  background: var(--panel);
-  font-size: 0.78rem;
+  background: #fff;
+  color: var(--ink);
+  font-size: 0.68rem;
+  font-weight: 900;
+  text-align: center;
+  box-shadow: 0 0 0 1px rgb(0 0 0 / 20%);
+}
+
+.player-awards {
+  display: flex;
+  justify-content: space-around;
+  gap: 0.4rem;
+}
+
+.player-award {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.1rem;
+  color: #6a717a;
   font-weight: 800;
-  font-variant-numeric: tabular-nums;
+  font-size: 0.85rem;
 }
 
-/* A tiny card back: tan for resources, purple for development cards. */
-.stat-icon {
-  display: inline-block;
-  width: 0.55rem;
-  height: 0.78rem;
-  border-radius: 0.14rem;
-  box-shadow: 0 0 0 1px rgb(0 0 0 / 18%);
+.award-icon {
+  width: 1.9rem;
+  height: 1.9rem;
+  opacity: 0.45;
 }
 
-.stat-cards .stat-icon {
-  background: linear-gradient(#e0b56c, #b0803a);
+.award-letter {
+  display: grid;
+  place-items: center;
+  font-weight: 900;
 }
 
-.stat-dev .stat-icon {
-  background: linear-gradient(var(--dev), var(--dev-deep));
+/* The holder's tally is lit, and gold. */
+.award-held {
+  color: #8a5d00;
 }
 
-.stat-award {
-  padding-left: 0.5rem;
-  border-color: var(--accent);
-  background: var(--accent-sink);
-  color: #7a5400;
+.award-held .award-icon {
+  opacity: 1;
+  filter: drop-shadow(0 0 3px rgb(242 180 58 / 90%));
 }
 
-.player-supply {
-  margin-top: 0.2rem;
-  font-size: 0.7rem;
-  color: var(--ink-faint);
-  font-variant-numeric: tabular-nums;
+/* The viewer's own row, at the foot of the column, a size larger. */
+.panel-you .player {
+  background: none;
+  border: 0;
+  box-shadow: none;
+  padding: 0;
+}
+
+.panel-you .player-avatar {
+  width: 3.2rem;
+  height: 3.2rem;
+  font-size: 1.3rem;
+}
+
+.panel-you .player-name {
+  font-size: 0.95rem;
+  color: var(--ink);
 }
 
 /* ── Hand and bank ──────────────────────────────────────────────────────────────────────── */
 
-/* The hand panel is a fixed-height slot; the cards scroll sideways rather than wrap and grow it. */
+/* The hand: a strip along the bottom edge from the left, a fixed height whatever it holds. The
+   cards scroll sideways rather than wrap and grow it. */
 .panel-hand {
   display: flex;
   flex-direction: column;
-  min-height: 0;
+  flex: 1;
+  min-width: 0;
+  height: 6.9rem;
+  padding: 0.55rem 0.9rem 0.4rem;
+  border-radius: 0 var(--r-lg) 0 0;
+  background: #f8f6f0;
+  box-shadow: 0 -3px 12px rgb(10 30 60 / 30%);
+}
+
+/* The hand needs no heading on a table. */
+.panel-hand .panel-title {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
 }
 
 .hand {
@@ -1056,8 +1069,9 @@ select {
   gap: 1rem;
   align-items: flex-start;
   min-height: 0;
-  /* Room for the count badges, which sit outside each card's corner. */
-  padding: 0.15rem 0.6rem 0 0;
+  /* Room for the count badges outside each card's corner, and for the leftmost card's outline,
+     which the scroll box would otherwise shave off. */
+  padding: 0.1rem 0.65rem 0 0.2rem;
   overflow-x: auto;
   overflow-y: hidden;
   scrollbar-width: thin;
@@ -1154,7 +1168,7 @@ select {
 
 .hand-hint {
   position: absolute;
-  top: 0.75rem;
+  top: 0.35rem;
   right: 0.85rem;
   margin: 0;
   font-size: 0.75rem;
@@ -1162,24 +1176,65 @@ select {
   color: var(--ink-faint);
 }
 
-/* The bank is the same cards, stacked smaller. */
+/* The bank: its building, then its stock as a row of small cards, the deck last. */
+.bank-row {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.bank-icon {
+  flex: none;
+  width: 2.6rem;
+  height: 2.6rem;
+}
+
 .panel-bank .chips {
-  gap: 0.55rem;
+  flex-wrap: nowrap;
+  gap: 0.35rem;
+  padding-top: 0.5rem;
 }
 
 .panel-bank .card-chip {
-  width: 2.75rem;
-  height: 3.7rem;
-  padding-top: 0.25rem;
+  width: 2.45rem;
+  height: 3.4rem;
+  padding: 0.3rem 0 0;
+  justify-content: flex-start;
 }
 
 .panel-bank .card-art {
-  width: 1.8rem;
-  height: 1.8rem;
+  width: 1.7rem;
+  height: 1.7rem;
 }
 
 .panel-bank .card-name {
-  font-size: 0.5rem;
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+}
+
+.panel-bank .card-count {
+  top: -0.5rem;
+  right: -0.4rem;
+  min-width: 1.25rem;
+  height: 1.25rem;
+  font-size: 0.65rem;
+}
+
+.card-deck {
+  background: linear-gradient(var(--dev), var(--dev-deep));
+  box-shadow:
+    0 0 0 1px var(--dev-deep),
+    var(--lift-1);
+}
+
+.deck-art {
+  display: block;
+  border-radius: 50%;
+  background: rgb(255 255 255 / 30%);
+  transform: scale(0.6);
 }
 
 .devs {
@@ -1259,23 +1314,6 @@ select {
   border-color: var(--accent);
 }
 
-.decks {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.5rem;
-  margin-top: 0.6rem;
-  font-size: 0.75rem;
-  font-weight: 700;
-  color: var(--ink-dim);
-}
-
-.deck {
-  padding: 0.1rem 0.5rem;
-  border-radius: 999px;
-  background: var(--panel-soft);
-  font-variant-numeric: tabular-nums;
-}
-
 /* ── Actions ────────────────────────────────────────────────────────────────────────────── */
 
 .btns {
@@ -1343,7 +1381,7 @@ select {
 
 .tray {
   position: absolute;
-  left: 0;
+  left: 0.5rem;
   bottom: calc(100% + 0.6rem);
   z-index: 5;
   width: min(36rem, calc(100vw - 2rem));

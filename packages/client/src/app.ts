@@ -25,15 +25,17 @@ import {
   actionsPanel,
   bankPanel,
   type Draft,
+  gameMenu,
   type Handlers,
   handPanel,
-  headerPanel,
   logPanel,
   type NewGameRequest,
   playersPanel,
-  turnBar,
+  statusPill,
+  turnBox,
   type Ui,
   type Watching,
+  youPanel,
 } from './panels.js';
 import { boardScene } from './scene.js';
 import type { Table } from './table.js';
@@ -67,8 +69,8 @@ export class App {
   private at = -1;
   /** How far into the board we are looking. Kept here because the board is rebuilt every render. */
   private zoom: Zoom = WHOLE;
-  /** Whether the player has pulled up the action menu. */
-  private menu = false;
+  /** Whether the ⚙ game menu is open. */
+  private settings = false;
   /** Whether every legal spot is lit, rather than only the one under the pointer. Opt-in. */
   private spots = false;
   /** A development card in hand whose ways of being played are on show. */
@@ -84,7 +86,7 @@ export class App {
       this.choice = null;
       this.draft = null;
       this.group = null;
-      this.menu = false;
+      this.settings = false;
       this.dev = null;
       this.table.dismiss();
       this.render();
@@ -121,7 +123,7 @@ export class App {
       group: this.group,
       draft: this.draft,
       choice: this.choice,
-      menu: this.menu,
+      settings: this.settings,
       spots: this.spots,
       dev: this.dev,
       lines: snap.events.map((event) => narrate(snap.view, event)),
@@ -134,39 +136,39 @@ export class App {
     const on = this.handlers();
     const scene = boardScene(this.table.ctx, snap.view, visibleTargets(affs, this.group));
 
+    // One screen, laid out like an online table: the board fills the play area, with the
+    // controls floating over it — the ⚙ rail top left, the hand along the bottom, the action bar
+    // bottom right — and the log, bank and scoreboard in a column down the right.
     render(
       this.root,
-      headerPanel(ui, on),
       h('main', {
-        attrs: { class: 'layout' },
+        attrs: { class: 'table' },
         children: [
           h('div', {
-            attrs: { class: 'stage' },
+            attrs: { class: 'play' },
             children: [
               h('div', {
                 attrs: { class: 'board-wrap' },
-                children: [
-                  this.board(scene, (locus) => this.onTarget(ui, locus)),
-                  this.zoomControls(scene.viewBox),
-                ],
+                children: [this.board(scene, (locus) => this.onTarget(ui, locus))],
               }),
-              // What you hold and what you may do, docked under the board. The turn dock comes
-              // first in the DOM (its menu is the first panel); CSS puts the hand on the left.
+              this.rail(scene.viewBox, ui, on),
+              // The dock comes first in the DOM, so the action bar is the first panel; CSS puts
+              // the hand on its left.
               h('div', {
                 attrs: { class: 'hud' },
                 children: [
                   h('div', {
                     attrs: { class: 'turn-dock' },
-                    children: [actionsPanel(ui, on), turnBar(ui, on)],
+                    children: [turnBox(ui, on), statusPill(ui), actionsPanel(ui, on)],
                   }),
                   handPanel(ui, on),
                 ],
               }),
             ],
           }),
-          h('div', {
+          h('aside', {
             attrs: { class: 'side' },
-            children: [playersPanel(ui), bankPanel(ui), logPanel(ui)],
+            children: [logPanel(ui), bankPanel(ui), playersPanel(ui), youPanel(ui)],
           }),
         ],
       }),
@@ -188,7 +190,8 @@ export class App {
     return svg;
   }
 
-  private zoomControls(viewBox: string): HTMLElement {
+  /** The round buttons top left: the game menu, zoom, and the spot highlighter. */
+  private rail(viewBox: string, ui: Ui, on: Handlers): HTMLElement {
     const base = parseBox(viewBox);
     const step = (factor: number): void => {
       const view = viewOf(base, this.zoom);
@@ -208,8 +211,21 @@ export class App {
         children: [label],
       });
     return h('div', {
-      attrs: { class: 'zoom-controls' },
+      attrs: { class: 'rail' },
       children: [
+        h('button', {
+          attrs: {
+            class: `zoom-btn rail-settings${ui.settings ? ' zoom-on' : ''}`,
+            type: 'button',
+            title: 'Game',
+            'aria-label': 'Game',
+            'aria-expanded': ui.settings ? 'true' : 'false',
+            'aria-controls': 'game-menu',
+          },
+          on: { click: () => on.toggleSettings() },
+          children: ['⚙'],
+        }),
+        gameMenu(ui, on),
         control('+', 'Zoom in', this.zoom.scale >= MAX_SCALE, () => step(1.5)),
         control('−', 'Zoom out', this.zoom.scale <= 1, () => step(1 / 1.5)),
         control('⤢', 'Show the whole board', this.zoom === WHOLE, () => {
@@ -224,7 +240,7 @@ export class App {
             'aria-label': 'Highlight every legal spot',
             'aria-pressed': this.spots ? 'true' : 'false',
           },
-          on: { click: () => this.handlers().toggleSpots() },
+          on: { click: () => on.toggleSpots() },
           children: ['◎'],
         }),
       ],
@@ -243,23 +259,19 @@ export class App {
         this.group = group;
         this.choice = null;
         // Picking a kind of spot is a request to look at the board, so get out of its way.
-        this.menu = false;
         this.render();
       },
       pickDev: (card) => {
         this.dev = card;
         this.draft = null;
-        this.menu = false;
         this.render();
       },
       toggleSpots: () => {
         this.spots = !this.spots;
         this.render();
       },
-      toggleMenu: () => {
-        const open = this.menu || this.choice !== null;
-        this.menu = !open;
-        if (open) this.choice = null;
+      toggleSettings: () => {
+        this.settings = !this.settings;
         this.render();
       },
       watch: (watching) => {
@@ -267,12 +279,10 @@ export class App {
         this.group = null;
         this.choice = null;
         this.draft = null;
-        this.menu = false;
         this.render();
       },
       compose: (group, seed) => {
         this.draft = draftFor(group, seed);
-        this.menu = false;
         this.dev = null;
         this.table.dismiss();
         this.render();
@@ -324,8 +334,6 @@ export class App {
       this.render();
       return;
     }
-    // The menu was a means to this move; once it is made, the board is what matters.
-    this.menu = false;
     this.table.act(seat, action);
     this.render();
   }

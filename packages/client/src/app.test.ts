@@ -34,9 +34,16 @@ function click(el: Element | null | undefined): void {
   el.dispatchEvent(new window.MouseEvent('click', { bubbles: true }));
 }
 
-/** The first button whose label contains `label`. */
+/**
+ * The first enabled button whose label contains `label`.
+ *
+ * Enabled only: the action bar keeps every tile in place and dims the ones not on offer, so a
+ * disabled "End turn" is the bar saying no, not an offer.
+ */
 function button(root: HTMLElement, label: string): HTMLElement | undefined {
-  return [...root.querySelectorAll('button')].find((b) => (b.textContent ?? '').includes(label));
+  return [...root.querySelectorAll('button')].find(
+    (b) => !b.disabled && (b.textContent ?? '').includes(label),
+  );
 }
 
 function texts(root: HTMLElement, selector: string): readonly string[] {
@@ -133,8 +140,7 @@ describe('App', () => {
     playOpening(root);
     click(button(root, 'Roll the dice'));
 
-    // Bought from the Build menu's price list, where it is a tile like any piece.
-    const buy = button(root, 'Development card');
+    const buy = button(root, 'Buy a development card');
     expect(buy).toBeDefined();
     click(buy);
 
@@ -191,25 +197,25 @@ describe('App', () => {
     expect(root.querySelector('.tray')).toBeNull();
   });
 
-  it('keeps the Build menu out of the way until it is asked for', () => {
+  it('lays out the action bar in a fixed order', () => {
     const { root } = mount();
     playOpening(root);
-    // Rolling is a move of its own, on the bar; there is nothing to buy yet.
-    expect(root.querySelector('.btn-menu')).toBeNull();
+
+    // Left to right: trade, development card, road, settlement, city, and the dice while a roll
+    // is owed — which becomes the end of the turn once it is not.
+    const labels = (): string[] =>
+      texts(root, '.action-tile .sr-only').map((label) => label.replace(/ \(.*\)$/, ''));
+    expect(labels()).toEqual([
+      'Trade',
+      'Buy a development card',
+      'Build a road',
+      'Build a settlement',
+      'Build a city',
+      'Roll the dice',
+    ]);
     click(button(root, 'Roll the dice'));
-
-    const menu = root.querySelector<HTMLElement>('#action-menu');
-    expect(menu?.hidden).toBe(true);
-    click(root.querySelector('.btn-menu'));
-    expect(root.querySelector<HTMLElement>('#action-menu')?.hidden).toBe(false);
-    // The price list shows every piece, bought or not.
-    expect(texts(root, '.shop-name')).toEqual(
-      expect.arrayContaining(['Road', 'Settlement', 'City', 'Development card']),
-    );
-
-    // Playing a move puts it away again.
-    click(button(root, 'End turn'));
-    expect(root.querySelector<HTMLElement>('#action-menu')?.hidden).toBe(true);
+    expect(labels().at(-1)).toBe('End turn');
+    expect(button(root, 'End turn')).toBeDefined();
   });
 
   it('keeps the board clickable across re-renders', () => {

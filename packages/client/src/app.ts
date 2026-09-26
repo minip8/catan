@@ -37,6 +37,16 @@ import {
 import { boardScene } from './scene.js';
 import type { Table } from './table.js';
 import { affordances, type Placement, visibleTargets } from './targets.js';
+import {
+  attachZoom,
+  boxString,
+  MAX_SCALE,
+  parseBox,
+  viewOf,
+  WHOLE,
+  type Zoom,
+  zoomAt,
+} from './zoom.js';
 
 export interface AppHandlers {
   readonly newGame: (request: NewGameRequest) => void;
@@ -54,6 +64,8 @@ export class App {
   private choice: readonly Placement[] | null = null;
   /** The last action count rendered, so a move that lands can close what it was aimed at. */
   private at = -1;
+  /** How far into the board we are looking. Kept here because the board is rebuilt every render. */
+  private zoom: Zoom = WHOLE;
 
   constructor(root: HTMLElement, table: Table, on: AppHandlers) {
     this.root = root;
@@ -121,9 +133,8 @@ export class App {
               h('div', {
                 attrs: { class: 'board-wrap' },
                 children: [
-                  boardSvg(scene, {
-                    onTarget: (locus) => this.onTarget(ui, locus),
-                  }),
+                  this.board(scene, (locus) => this.onTarget(ui, locus)),
+                  this.zoomControls(scene.viewBox),
                 ],
               }),
               // What you hold and what you may do, docked under the board. Actions come first in
@@ -141,6 +152,53 @@ export class App {
         ],
       }),
     );
+  }
+
+  // ── Board and zoom ────────────────────────────────────────────────────────────────────────
+
+  private board(scene: ReturnType<typeof boardScene>, onTarget: (locus: string) => void) {
+    const svg = boardSvg(scene, { onTarget }) as SVGSVGElement;
+    const base = parseBox(scene.viewBox);
+    svg.setAttribute('viewBox', boxString(viewOf(base, this.zoom)));
+    svg.classList.toggle('board-zoomed', this.zoom.scale > 1);
+    // Gestures only remember the zoom: they move the live SVG themselves, and re-rendering on
+    // every wheel tick would rebuild the board for nothing.
+    attachZoom(svg, base, this.zoom, (zoom) => {
+      this.zoom = zoom;
+    });
+    return svg;
+  }
+
+  private zoomControls(viewBox: string): HTMLElement {
+    const base = parseBox(viewBox);
+    const step = (factor: number): void => {
+      const view = viewOf(base, this.zoom);
+      this.zoom = zoomAt(
+        base,
+        this.zoom,
+        factor,
+        view.x + view.width / 2,
+        view.y + view.height / 2,
+      );
+      this.render();
+    };
+    const control = (label: string, title: string, disabled: boolean, click: () => void) =>
+      h('button', {
+        attrs: { class: 'zoom-btn', type: 'button', title, 'aria-label': title, disabled },
+        on: { click },
+        children: [label],
+      });
+    return h('div', {
+      attrs: { class: 'zoom-controls' },
+      children: [
+        control('+', 'Zoom in', this.zoom.scale >= MAX_SCALE, () => step(1.5)),
+        control('−', 'Zoom out', this.zoom.scale <= 1, () => step(1 / 1.5)),
+        control('⤢', 'Show the whole board', this.zoom.scale <= 1, () => {
+          this.zoom = WHOLE;
+          this.render();
+        }),
+      ],
+    });
   }
 
   private handlers(): Handlers {

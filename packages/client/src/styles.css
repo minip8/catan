@@ -263,6 +263,54 @@ select {
   display: block;
   width: 100%;
   height: 100%;
+  /* The board handles its own wheel, drag and pinch; the browser must not scroll or zoom the page. */
+  touch-action: none;
+}
+
+.board-zoomed {
+  cursor: grab;
+}
+
+.board-zoomed:active {
+  cursor: grabbing;
+}
+
+.board-wrap {
+  position: relative;
+}
+
+/* Zoom buttons float over the sea in the board's corner. */
+.zoom-controls {
+  position: absolute;
+  top: 0.25rem;
+  left: 0.25rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+}
+
+.zoom-btn {
+  width: 2.2rem;
+  height: 2.2rem;
+  border: 0;
+  border-radius: var(--r-md);
+  background: var(--panel);
+  color: var(--ink);
+  font-size: 1.15rem;
+  font-weight: 800;
+  line-height: 1;
+  cursor: pointer;
+  box-shadow: var(--lift-2), var(--press);
+  transition: background-color 120ms ease;
+}
+
+.zoom-btn:hover:not(:disabled) {
+  background: #e3ecf6;
+}
+
+.zoom-btn:disabled {
+  opacity: 0.5;
+  cursor: default;
 }
 
 /* Hand on the left, actions on the right, as on most online tables. DOM order stays actions-first. */

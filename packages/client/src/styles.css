@@ -416,11 +416,14 @@ select {
   pointer-events: none;
 }
 
-/* Tokens, harbour badges and pieces all take the one lift defined in `board.ts`. */
+/* Tokens and harbour badges take the one lift defined in `board.ts`; pieces stand taller. */
 .token,
-.dock,
-.piece {
+.dock {
   filter: url(#b-raise);
+}
+
+.piece {
+  filter: url(#b-stand);
 }
 
 .token-face {
@@ -500,9 +503,19 @@ select {
 
 .piece .building,
 .piece .road {
-  stroke: rgb(0 0 0 / 60%);
-  stroke-width: 1.8;
+  stroke: rgb(0 0 0 / 70%);
+  stroke-width: 2;
   stroke-linejoin: round;
+}
+
+/* The pale ring round every piece: dark outline inside, light halo outside, so a piece reads
+   against any tile whatever its own colour. */
+.piece .halo {
+  fill: none;
+  stroke: #fffdf6;
+  stroke-width: 6;
+  stroke-linejoin: round;
+  pointer-events: none;
 }
 
 .piece .robber {

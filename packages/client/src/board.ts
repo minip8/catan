@@ -135,7 +135,22 @@ function defs(): SVGElement {
           ripple('M 38 32 q 5 -4 10 0 q 5 4 10 0'),
         ],
       }),
-      // One lift, shared by tokens, harbour badges and pieces.
+      // Pieces stand taller than anything printed on the board, so they cast a longer shadow.
+      s('filter', {
+        attrs: { id: 'b-stand', x: '-50%', y: '-50%', width: '200%', height: '200%' },
+        children: [
+          s('feDropShadow', {
+            attrs: {
+              dx: 0,
+              dy: 2.6,
+              stdDeviation: 1.8,
+              'flood-color': '#000000',
+              'flood-opacity': 0.6,
+            },
+          }),
+        ],
+      }),
+      // One lift, shared by tokens and harbour badges.
       s('filter', {
         attrs: { id: 'b-raise', x: '-40%', y: '-40%', width: '180%', height: '180%' },
         children: [
@@ -377,9 +392,15 @@ function pieceGroup(piece: PieceShape, size: number): SVGElement {
   const fill = seat?.color ?? '#3a3a3a';
   const transform = `translate(${piece.at.x} ${piece.at.y}) rotate(${(piece.angle * 180) / Math.PI})`;
 
+  const shapes = shapeFor(piece.kind, size, fill);
+  // A pale halo traced round the silhouette, under it. Bright terrain swallowed a bare outline —
+  // a red house on hills, a white one on a field — and a halo separates any colour from any tile.
+  const halo = shapes[0]?.cloneNode(false) as SVGElement | undefined;
+  halo?.setAttribute('class', 'halo');
+
   return s('g', {
     attrs: { class: `piece piece-${piece.kind}`, id: `piece-${piece.id}`, transform },
-    children: shapeFor(piece.kind, size, fill),
+    children: halo === undefined ? shapes : [halo, ...shapes],
   });
 }
 
@@ -392,9 +413,9 @@ function shapeFor(kind: string, size: number, fill: string): SVGElement[] {
     case 'road':
       return road(size * 0.4, fill);
     case 'settlement':
-      return settlement(size * 0.3, fill);
+      return settlement(size * 0.34, fill);
     case 'city':
-      return city(size * 0.36, fill);
+      return city(size * 0.42, fill);
     case 'robber':
       return robber(size * 0.22);
     default:

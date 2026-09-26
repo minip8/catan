@@ -338,8 +338,6 @@ select {
   align-items: flex-end;
   gap: 0.45rem;
   flex: none;
-  /* Bottom right, however narrow the hand. */
-  margin-left: auto;
   padding-right: 0.6rem;
 }
 
@@ -549,7 +547,6 @@ select {
 
   .turn-dock {
     align-items: stretch;
-    margin-left: 0;
     padding: 0 0.5rem;
   }
 
@@ -1028,8 +1025,8 @@ select {
 .panel-hand {
   display: flex;
   flex-direction: column;
-  /* As wide as a full hand needs and no wider; a bigger hand scrolls. */
-  flex: 0 1 32rem;
+  /* Runs from the left edge right up to the action tiles. */
+  flex: 1;
   min-width: 0;
   height: var(--hud-h);
   padding: 0.55rem 0.9rem 0.4rem;

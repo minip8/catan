@@ -308,6 +308,15 @@ select {
   background: #e3ecf6;
 }
 
+.zoom-on {
+  background: var(--primary);
+  color: #fff;
+}
+
+.zoom-on:hover:not(:disabled) {
+  background: #3b8de0;
+}
+
 .zoom-btn:disabled {
   opacity: 0.5;
   cursor: default;
@@ -683,8 +692,9 @@ select {
   pointer-events: none;
 }
 
-/* Live spots: white rings, faint and slowly breathing, so a board with forty legal roads stays
-   readable but nothing has to be hunted for. */
+/* Live spots. Hidden until the pointer finds one, so the board is not papered over with rings;
+   the player can opt into seeing all of them (`.board-spots`), which then breathe slowly so a
+   board with forty legal roads stays readable. Hidden spots keep their hit area. */
 .target {
   cursor: pointer;
 }
@@ -693,11 +703,20 @@ select {
 .target-hex,
 .target-edge {
   fill: #fff;
-  fill-opacity: 0.5;
+  fill-opacity: 0;
   stroke: rgb(20 40 60 / 55%);
   stroke-width: 2;
+  stroke-opacity: 0;
+  transition:
+    fill-opacity 120ms ease,
+    stroke-opacity 120ms ease;
+}
+
+.board-spots .target-vertex,
+.board-spots .target-hex,
+.board-spots .target-edge {
+  stroke-opacity: 1;
   animation: target-breathe 2.6s ease-in-out infinite;
-  transition: fill-opacity 120ms ease;
 }
 
 @keyframes target-breathe {
@@ -717,8 +736,9 @@ select {
 .target:focus-visible .target-hex,
 .target:focus-visible .target-edge {
   animation: none;
-  fill-opacity: 1;
+  fill-opacity: 0.95;
   stroke: var(--ink);
+  stroke-opacity: 1;
 }
 
 /* ── Players ────────────────────────────────────────────────────────────────────────────── */
@@ -1358,9 +1378,9 @@ select {
     transition-duration: 0.001ms !important;
   }
 
-  .target-vertex,
-  .target-hex,
-  .target-edge {
+  .board-spots .target-vertex,
+  .board-spots .target-hex,
+  .board-spots .target-edge {
     fill-opacity: 0.6;
   }
 }

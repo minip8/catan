@@ -69,6 +69,8 @@ export class App {
   private zoom: Zoom = WHOLE;
   /** Whether the player has pulled up the action menu. */
   private menu = false;
+  /** Whether every legal spot is lit, rather than only the one under the pointer. Opt-in. */
+  private spots = false;
 
   constructor(root: HTMLElement, table: Table, on: AppHandlers) {
     this.root = root;
@@ -116,6 +118,7 @@ export class App {
       draft: this.draft,
       choice: this.choice,
       menu: this.menu,
+      spots: this.spots,
       lines: snap.events.map((event) => narrate(snap.view, event)),
       notice: this.table.notice,
       watching: this.watching,
@@ -172,6 +175,7 @@ export class App {
     const base = parseBox(scene.viewBox);
     svg.setAttribute('viewBox', boxString(viewOf(base, this.zoom)));
     svg.classList.toggle('board-zoomed', this.zoom.scale > 1);
+    svg.classList.toggle('board-spots', this.spots);
     // Gestures only remember the zoom: they move the live SVG themselves, and re-rendering on
     // every wheel tick would rebuild the board for nothing.
     attachZoom(svg, base, this.zoom, (zoom) => {
@@ -208,6 +212,17 @@ export class App {
           this.zoom = WHOLE;
           this.render();
         }),
+        h('button', {
+          attrs: {
+            class: `zoom-btn zoom-spots${this.spots ? ' zoom-on' : ''}`,
+            type: 'button',
+            title: 'Highlight every legal spot',
+            'aria-label': 'Highlight every legal spot',
+            'aria-pressed': this.spots ? 'true' : 'false',
+          },
+          on: { click: () => this.handlers().toggleSpots() },
+          children: ['◎'],
+        }),
       ],
     });
   }
@@ -225,6 +240,10 @@ export class App {
         this.choice = null;
         // Picking a kind of spot is a request to look at the board, so get out of its way.
         this.menu = false;
+        this.render();
+      },
+      toggleSpots: () => {
+        this.spots = !this.spots;
         this.render();
       },
       toggleMenu: () => {

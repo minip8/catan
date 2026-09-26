@@ -24,7 +24,7 @@ import {
 import { h, text } from './dom.js';
 import { glyphIcon } from './icons.js';
 import { bundleText, describeAction, type Line, stepName } from './narrate.js';
-import type { Affordances, Group, Placement } from './targets.js';
+import { type Affordances, type Group, type Placement, visibleTargets } from './targets.js';
 import { cardDefName, cardStyle, humanize, playerName, seatStyle } from './theme.js';
 
 /** A composed action the engine could not enumerate: a discard, or a trade offer. */
@@ -64,6 +64,8 @@ export interface Ui {
   readonly choice: readonly Placement[] | null;
   /** Whether the player has pulled up the action menu. */
   readonly menu: boolean;
+  /** Whether every legal spot is lit, rather than only the one under the pointer. */
+  readonly spots: boolean;
   readonly lines: readonly Line[];
   readonly notice: string | null;
   /**
@@ -97,6 +99,7 @@ export interface Handlers {
   readonly cancelDraft: () => void;
   readonly chooseNothing: () => void;
   readonly toggleMenu: () => void;
+  readonly toggleSpots: () => void;
   readonly newGame: (request: NewGameRequest) => void;
 }
 
@@ -456,18 +459,19 @@ function acting(ui: Ui): boolean {
  */
 export function turnBar(ui: Ui, on: Handlers): HTMLElement {
   const lines: HTMLElement[] = [text('p', 'turn-say', prompt(ui))];
+  // Spots are only lit under the pointer unless the player asks for all of them, so say so
+  // whenever there are some to find.
   const selected = ui.affordances.groups.find((g) => g.key === ui.group);
-  if (selected !== undefined) {
+  if (acting(ui) && visibleTargets(ui.affordances, ui.group).length > 0) {
+    const link = (label: string, click: () => void): HTMLElement =>
+      h('button', { attrs: { class: 'link', type: 'button' }, on: { click }, children: [label] });
     lines.push(
       h('p', {
         attrs: { class: 'turn-hint' },
         children: [
-          `Pick a highlighted spot to ${selected.note}. `,
-          h('button', {
-            attrs: { class: 'link', type: 'button' },
-            on: { click: () => on.selectGroup(null) },
-            children: ['Cancel'],
-          }),
+          ui.spots ? 'Pick a lit spot on the board. ' : 'Hover the board to find a spot. ',
+          link(ui.spots ? 'Hide spots' : 'Show all', () => on.toggleSpots()),
+          ...(selected === undefined ? [] : [' · ', link('Cancel', () => on.selectGroup(null))]),
         ],
       }),
     );

@@ -89,6 +89,8 @@ export interface TargetShape {
   readonly at: Point;
   readonly angle: number;
   readonly options: number;
+  /** Lit only under the pointer. */
+  readonly quiet: boolean;
 }
 
 export interface Scene {
@@ -284,6 +286,7 @@ function targetShapes(layout: Layout, targets: readonly Target[]): readonly Targ
     at: pointOf(layout, target.locus, target.kind),
     angle: angleOf(layout, target.locus, target.kind),
     options: target.options.length,
+    quiet: target.quiet === true,
   }));
 }
 

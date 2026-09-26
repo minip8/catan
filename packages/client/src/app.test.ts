@@ -218,6 +218,31 @@ describe('App', () => {
     expect(button(root, 'End turn')).toBeDefined();
   });
 
+  it('prices a spot on the board, and lets the engine refuse what the player cannot pay', () => {
+    const { root } = mount();
+    playOpening(root);
+    click(button(root, 'Roll the dice'));
+
+    // Seed 11 leaves Red unable to afford any piece after the first roll, yet every spot a piece
+    // could go is still on the board, quietly, waiting to be found.
+    const spots = root.querySelectorAll('.target-quiet');
+    expect(spots.length).toBeGreaterThan(0);
+    expect(root.querySelector('.build-pop')).toBeNull();
+
+    // Clicking one opens its popup rather than building.
+    const pieces = root.querySelectorAll('.pieces .piece').length;
+    click(spots[0]);
+    const option = root.querySelector('.pop-option');
+    expect(option?.classList.contains('pop-poor')).toBe(true);
+    expect(root.querySelectorAll('.pieces .piece').length).toBe(pieces);
+
+    // Buying from it goes to the engine, which says no.
+    click(option);
+    expect(root.querySelectorAll('.pieces .piece').length).toBe(pieces);
+    expect(root.querySelector('.notice')?.textContent ?? '').not.toBe('');
+    expect(root.querySelector('.build-pop')).toBeNull();
+  });
+
   it('keeps the board clickable across re-renders', () => {
     const { root } = mount();
     click(root.querySelector('.target'));

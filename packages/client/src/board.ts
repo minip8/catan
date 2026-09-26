@@ -23,7 +23,7 @@
  * the whole SVG on every action, and a per-hex turbulence filter would be re-rasterised each time.
  */
 
-import type { LocusId } from '@catan/core';
+import type { Action, LocusId } from '@catan/core';
 
 import { s } from './dom.js';
 import { glyph } from './icons.js';
@@ -32,9 +32,34 @@ import { cardStyle, SAND_FILL, SEA_FILL, seatStyle, terrainStyle } from './theme
 
 export interface BoardHandlers {
   readonly onTarget: (locus: LocusId, event: MouseEvent) => void;
+  /** A purchase picked from the popup over a spot. */
+  readonly onPurchase?: (action: Action) => void;
 }
 
-export function boardSvg(scene: Scene, handlers: BoardHandlers): SVGElement {
+/** One thing to buy in the popup over a spot. */
+export interface PopOption {
+  readonly action: Action;
+  /** The piece kind drawn in the popup. */
+  readonly kind: string;
+  /** One entry per card of the price, and whether the player holds it. */
+  readonly cost: readonly { readonly kind: string; readonly held: boolean }[];
+  readonly affordable: boolean;
+  readonly label: string;
+}
+
+/** The popup over a clicked spot: what could be bought there, in the buyer's colour. */
+export interface Pop {
+  readonly locus: LocusId;
+  readonly color: string;
+  readonly options: readonly PopOption[];
+}
+
+export function boardSvg(
+  scene: Scene,
+  handlers: BoardHandlers,
+  pop: Pop | null = null,
+): SVGElement {
+  const popAt = pop === null ? undefined : scene.targets.find((t) => t.locus === pop.locus)?.at;
   const land = scene.hexes.filter((hex) => hex.class !== 'sea');
   return s('svg', {
     attrs: {
@@ -76,8 +101,12 @@ export function boardSvg(scene: Scene, handlers: BoardHandlers): SVGElement {
       }),
       s('g', {
         attrs: { class: 'targets' },
-        children: scene.targets.map((target) => targetGroup(target, scene.size, handlers)),
+        children: scene.targets.map((target) =>
+          targetGroup(target, scene.size, handlers, target.locus === pop?.locus),
+        ),
       }),
+      // Last, so nothing on the board covers what the player is about to buy.
+      pop === null || popAt === undefined ? null : popGroup(pop, popAt, scene.size, handlers),
     ],
   });
 }
@@ -596,7 +625,12 @@ function points(pairs: readonly (readonly [number, number])[]): string {
 
 // ── Targets ─────────────────────────────────────────────────────────────────────────────────
 
-function targetGroup(target: TargetShape, size: number, handlers: BoardHandlers): SVGElement {
+function targetGroup(
+  target: TargetShape,
+  size: number,
+  handlers: BoardHandlers,
+  open: boolean,
+): SVGElement {
   const transform = `translate(${target.at.x} ${target.at.y}) rotate(${(target.angle * 180) / Math.PI})`;
   const hit =
     target.kind === 'edge'
@@ -619,7 +653,7 @@ function targetGroup(target: TargetShape, size: number, handlers: BoardHandlers)
 
   return s('g', {
     attrs: {
-      class: 'target',
+      class: `target${target.quiet ? ' target-quiet' : ''}${open ? ' target-open' : ''}`,
       transform,
       tabindex: 0,
       role: 'button',
@@ -635,5 +669,119 @@ function targetGroup(target: TargetShape, size: number, handlers: BoardHandlers)
       },
     },
     children: [hit],
+  });
+}
+
+// ── Purchase popup ──────────────────────────────────────────────────────────────────────────
+
+/**
+ * A speech bubble over a spot holding what could be bought there: the piece, in the buyer's
+ * colour, over its price as little cards. Cards the player does not hold are faded — the popup
+ * shows a purchase the player cannot afford rather than hiding it, and the engine refuses it if
+ * clicked.
+ */
+function popGroup(
+  pop: Pop,
+  at: { readonly x: number; readonly y: number },
+  size: number,
+  handlers: BoardHandlers,
+): SVGElement {
+  // Drawn half again larger than a tile's own furniture: it is read, not glanced at.
+  const u = size * 1.5;
+  const cell = u * 0.78;
+  const pad = u * 0.08;
+  const width = pop.options.length * cell + pad * 2;
+  const height = u * 0.82;
+  const tail = u * 0.14;
+  const left = at.x - width / 2;
+  const top = at.y - size * 0.22 - tail - height;
+  const r = u * 0.14;
+
+  // One outline for bubble and tail, so there is no seam where they meet.
+  const bubble = [
+    `M ${left + r} ${top}`,
+    `H ${left + width - r}`,
+    `Q ${left + width} ${top} ${left + width} ${top + r}`,
+    `V ${top + height - r}`,
+    `Q ${left + width} ${top + height} ${left + width - r} ${top + height}`,
+    `H ${at.x + tail}`,
+    `L ${at.x} ${top + height + tail}`,
+    `L ${at.x - tail} ${top + height}`,
+    `H ${left + r}`,
+    `Q ${left} ${top + height} ${left} ${top + height - r}`,
+    `V ${top + r}`,
+    `Q ${left} ${top} ${left + r} ${top}`,
+    'Z',
+  ].join(' ');
+
+  return s('g', {
+    attrs: { class: 'build-pop' },
+    children: [
+      s('path', { attrs: { class: 'pop-bubble', d: bubble } }),
+      ...pop.options.map((option, i) => {
+        const cx = left + pad + cell * (i + 0.5);
+        const cardW = u * 0.12;
+        const cardH = u * 0.16;
+        const gap = u * 0.025;
+        const row = option.cost.length * cardW + (option.cost.length - 1) * gap;
+        const shapes = shapeFor(option.kind, u * 0.8, pop.color);
+        const halo = shapes[0]?.cloneNode(false) as SVGElement | undefined;
+        halo?.setAttribute('class', 'halo');
+        const tilt = option.kind === 'road' ? ' rotate(-30)' : '';
+        return s('g', {
+          attrs: {
+            class: `pop-option${option.affordable ? '' : ' pop-poor'}`,
+            role: 'button',
+            tabindex: 0,
+            'aria-label': option.label,
+          },
+          on: {
+            click: (event) => {
+              event.stopPropagation();
+              handlers.onPurchase?.(option.action);
+            },
+            keydown: (event) => {
+              const key = (event as KeyboardEvent).key;
+              if (key !== 'Enter' && key !== ' ') return;
+              event.preventDefault();
+              handlers.onPurchase?.(option.action);
+            },
+          },
+          children: [
+            s('title', { children: [option.label] }),
+            s('rect', {
+              attrs: {
+                class: 'pop-hit',
+                x: cx - cell / 2 + pad * 0.3,
+                y: top + pad * 0.5,
+                width: cell - pad * 0.6,
+                height: height - pad,
+                rx: r * 0.7,
+              },
+            }),
+            s('g', {
+              attrs: {
+                class: 'piece pop-piece',
+                transform: `translate(${cx.toFixed(1)} ${(top + height * 0.4).toFixed(1)})${tilt}`,
+              },
+              children: halo === undefined ? shapes : [halo, ...shapes],
+            }),
+            ...option.cost.map((card, j) =>
+              s('rect', {
+                attrs: {
+                  class: `pop-card${card.held ? '' : ' pop-card-missing'}`,
+                  x: cx - row / 2 + j * (cardW + gap),
+                  y: top + height * 0.72,
+                  width: cardW,
+                  height: cardH,
+                  rx: cardW * 0.18,
+                  fill: cardStyle(card.kind).color,
+                },
+              }),
+            ),
+          ],
+        });
+      }),
+    ],
   });
 }

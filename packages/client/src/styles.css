@@ -808,6 +808,24 @@ select {
   transition: fill-opacity 120ms ease;
 }
 
+/* A spot to buy at, during the turn: invisible until the pointer finds it, and kept lit while its
+   popup is open. */
+.target-quiet .target-vertex,
+.target-quiet .target-hex,
+.target-quiet .target-edge {
+  fill-opacity: 0;
+  stroke-opacity: 0;
+  animation: none;
+}
+
+.target-quiet.target-open .target-vertex,
+.target-quiet.target-open .target-hex,
+.target-quiet.target-open .target-edge {
+  fill-opacity: 0.9;
+  stroke: #6f7322;
+  stroke-opacity: 1;
+}
+
 @keyframes target-breathe {
   0%,
   100% {
@@ -828,6 +846,50 @@ select {
   fill-opacity: 0.9;
   stroke: #6f7322;
   stroke-opacity: 1;
+}
+
+/* The purchase popup over a spot: a cream speech bubble holding the piece and its price. */
+.build-pop {
+  filter: drop-shadow(0 3px 5px rgb(0 0 0 / 40%));
+}
+
+.pop-bubble {
+  fill: #fbf8f0;
+  stroke: rgb(0 0 0 / 25%);
+  stroke-width: 1;
+}
+
+.pop-option {
+  cursor: pointer;
+}
+
+.pop-hit {
+  fill: transparent;
+  transition: fill 120ms ease;
+}
+
+.pop-option:hover .pop-hit,
+.pop-option:focus-visible .pop-hit {
+  fill: rgb(47 127 209 / 16%);
+}
+
+.pop-option:focus-visible {
+  outline: none;
+}
+
+.pop-piece {
+  pointer-events: none;
+}
+
+.pop-card {
+  stroke: rgb(0 0 0 / 35%);
+  stroke-width: 0.8;
+  pointer-events: none;
+}
+
+/* A card of the price the player does not hold. */
+.pop-card-missing {
+  opacity: 0.28;
 }
 
 /* ── Players ────────────────────────────────────────────────────────────────────────────── */

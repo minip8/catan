@@ -16,11 +16,18 @@
  * because you finished, or because someone else's move made it moot.
  */
 
-import type { Action, PlayerId, PlayerView } from '@catan/core';
+import {
+  type Action,
+  type GameState,
+  type LocusId,
+  type PlayerId,
+  type PlayerView,
+  prospects,
+} from '@catan/core';
 
-import { boardSvg } from './board.js';
+import { boardSvg, type Pop } from './board.js';
 import { h, render } from './dom.js';
-import { narrate } from './narrate.js';
+import { bundleText, narrate } from './narrate.js';
 import {
   actionsPanel,
   bankPanel,
@@ -39,7 +46,15 @@ import {
 } from './panels.js';
 import { boardScene } from './scene.js';
 import type { Table } from './table.js';
-import { affordances, type Placement, visibleTargets } from './targets.js';
+import {
+  affordances,
+  type Placement,
+  type PurchaseSpot,
+  purchaseSpots,
+  spotTargets,
+  visibleTargets,
+} from './targets.js';
+import { pieceName, seatStyle } from './theme.js';
 import {
   attachZoom,
   boxString,
@@ -76,6 +91,10 @@ export class App {
   private preview: string | null = null;
   /** A development card in hand whose ways of being played are on show. */
   private dev: string | null = null;
+  /** The spot whose purchase popup is open. */
+  private pop: LocusId | null = null;
+  /** Where the player could buy something this render, for the board's clicks to look up. */
+  private spots: readonly PurchaseSpot[] = [];
 
   constructor(root: HTMLElement, table: Table, on: AppHandlers) {
     this.root = root;
@@ -89,6 +108,7 @@ export class App {
       this.group = null;
       this.settings = false;
       this.dev = null;
+      this.pop = null;
       this.table.dismiss();
       this.render();
     });
@@ -107,6 +127,7 @@ export class App {
       // A spot's menu is about a moment. Once the game has moved on, so has the moment.
       this.choice = null;
       this.dev = null;
+      this.pop = null;
     }
     // A selected group and an open composer are UI state about an *offer*. Keep them only while
     // the engine is still making it.
@@ -139,12 +160,37 @@ export class App {
     if (this.preview !== null && !affs.groups.some((g) => g.key === this.preview)) {
       this.preview = null;
     }
+    const lit = visibleTargets(affs, this.group ?? this.preview);
+    // With nothing lit, every spot the player could buy at — paid for or not — is on the board to
+    // be found under the pointer; clicking one opens its purchase popup.
+    const viewer = snap.viewer;
+    this.spots =
+      lit.length === 0 && viewer !== null && actors.includes(viewer) && this.table.ready
+        ? purchaseSpots(
+            this.table.ctx,
+            prospects(this.table.ctx, snap.view as unknown as GameState, viewer),
+            affs,
+          )
+        : [];
+    if (this.pop !== null && !this.spots.some((spot) => spot.locus === this.pop)) this.pop = null;
+
     const scene = boardScene(
       this.table.ctx,
       snap.view,
-      visibleTargets(affs, this.group ?? this.preview),
+      lit.length > 0 ? lit : spotTargets(this.spots),
     );
-    const svg = this.board(scene, (locus) => this.onTarget(ui, locus));
+    const svg = this.board(
+      scene,
+      {
+        onTarget: (locus) => this.onTarget(ui, locus),
+        onPurchase: (action) => {
+          this.pop = null;
+          this.draft = null;
+          this.send(action);
+        },
+      },
+      this.popFor(snap.view, viewer),
+    );
 
     // One screen, laid out like an online table: the board fills the play area, with the
     // controls floating over it — the ⚙ rail top left, the hand along the bottom, the action bar
@@ -183,9 +229,10 @@ export class App {
 
   private board(
     scene: ReturnType<typeof boardScene>,
-    onTarget: (locus: string) => void,
+    handlers: Parameters<typeof boardSvg>[1],
+    pop: Pop | null,
   ): SVGSVGElement {
-    const svg = boardSvg(scene, { onTarget }) as SVGSVGElement;
+    const svg = boardSvg(scene, handlers, pop) as SVGSVGElement;
     svg.setAttribute('viewBox', boxString(viewOf(parseBox(scene.viewBox), this.zoom)));
     return svg;
   }
@@ -195,7 +242,20 @@ export class App {
    * box once dragged, and a pinch over open water must zoom the board, not the page.
    */
   private surface(svg: SVGSVGElement, viewBox: string, children: readonly Node[]): HTMLElement {
-    const play = h('div', { attrs: { class: 'play' }, children });
+    const play = h('div', {
+      attrs: { class: 'play' },
+      on: {
+        // A click anywhere else on the board puts the purchase popup away.
+        click: (event) => {
+          if (this.pop === null) return;
+          const target = event.target as Element;
+          if (target.closest('.target, .build-pop, .hud, .rail') !== null) return;
+          this.pop = null;
+          this.render();
+        },
+      },
+      children,
+    });
     // Gestures only remember the zoom: they move the live SVG themselves, and re-rendering on
     // every wheel tick would rebuild the board for nothing.
     attachZoom(svg, play, parseBox(viewBox), this.zoom, (zoom) => {
@@ -261,6 +321,7 @@ export class App {
       selectGroup: (group) => {
         this.group = group;
         this.preview = null;
+        this.pop = null;
         this.choice = null;
         this.render();
       },
@@ -315,7 +376,44 @@ export class App {
 
   // ── Acting ────────────────────────────────────────────────────────────────────────────────
 
+  /** The popup for the open spot: each purchase with its price, card by card, against the hand. */
+  private popFor(view: PlayerView, viewer: PlayerId | null): Pop | null {
+    const spot = this.spots.find((s) => s.locus === this.pop);
+    const player = viewer === null ? undefined : view.players[viewer];
+    if (spot === undefined || player === undefined) return null;
+    return {
+      locus: spot.locus,
+      color: seatStyle(player.seat).color,
+      options: spot.purchases.map(({ action, affordable }) => {
+        const kind = String(action.kind ?? '');
+        const cost = this.table.ctx.rules.pieceKinds[kind]?.cost ?? {};
+        const cards = Object.entries(cost).flatMap(([card, n]) =>
+          Array.from({ length: n ?? 0 }, (_, i) => ({
+            kind: card,
+            held: i < (player.cards[card] ?? 0),
+          })),
+        );
+        return {
+          action,
+          kind,
+          cost: cards,
+          affordable,
+          label: `Build a ${pieceName(kind).toLowerCase()} (${bundleText(cost)})${
+            affordable ? '' : ' — not enough resources'
+          }`,
+        };
+      }),
+    };
+  }
+
   private onTarget(ui: Ui, locus: string): void {
+    // A spot to buy at opens (or closes) its popup rather than buying outright: the player sees
+    // what it is and what it costs before anything is spent.
+    if (this.spots.some((spot) => spot.locus === locus)) {
+      this.pop = this.pop === locus ? null : (locus as LocusId);
+      this.render();
+      return;
+    }
     const target = visibleTargets(ui.affordances, ui.group).find((t) => t.locus === locus);
     if (target === undefined) return;
     const only = target.options.length === 1 ? target.options[0] : undefined;

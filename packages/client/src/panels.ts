@@ -853,8 +853,10 @@ function draftForm(ui: Ui, draft: Draft, on: Handlers): HTMLElement {
           sameBundle(asCounts(choice.want), draft.want),
       );
 
+  // What you get on top, what you give at the bottom — nearest the hand it comes out of.
   const rows = [
     stepperRow(
+      'give',
       discarding ? 'Discard' : 'You give',
       kinds,
       draft.give,
@@ -867,8 +869,8 @@ function draftForm(ui: Ui, draft: Draft, on: Handlers): HTMLElement {
     ),
   ];
   if (!discarding) {
-    rows.push(
-      stepperRow('You want', kinds, draft.want, (kind, delta) =>
+    rows.unshift(
+      stepperRow('want', 'You want', kinds, draft.want, (kind, delta) =>
         on.editDraft({ ...draft, want: adjust(draft.want, kind, delta, 0, 20) }),
       ),
     );
@@ -938,6 +940,7 @@ function draftForm(ui: Ui, draft: Draft, on: Handlers): HTMLElement {
  * same thing spelled out, and the only way to take one back.
  */
 function stepperRow(
+  side: 'give' | 'want',
   label: string,
   kinds: readonly CardKind[],
   values: Readonly<Record<string, number>>,
@@ -945,7 +948,7 @@ function stepperRow(
   note?: (kind: CardKind) => string,
 ): HTMLElement {
   return h('div', {
-    attrs: { class: 'stepper-row' },
+    attrs: { class: 'stepper-row', 'data-side': side },
     children: [
       text('h4', 'sub', label),
       h('div', {

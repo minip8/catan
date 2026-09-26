@@ -44,14 +44,14 @@ function texts(root: HTMLElement, selector: string): readonly string[] {
 }
 
 /**
- * Add one card of `kind` to row `row` of the draft form.
+ * Add one card of `kind` to one side of the draft form.
  *
  * Re-queried on every call: each edit re-renders the panel, so a node held from before the last
  * click is detached and its handler closes over a stale draft.
  */
-function bump(root: HTMLElement, row: number, kind: string): void {
-  const rows = [...root.querySelectorAll('.stepper-row')];
-  const stepper = [...(rows[row]?.querySelectorAll('.stepper') ?? [])].find(
+function bump(root: HTMLElement, side: 'give' | 'want', kind: string): void {
+  const row = root.querySelector(`.stepper-row[data-side="${side}"]`);
+  const stepper = [...(row?.querySelectorAll('.stepper') ?? [])].find(
     (el) => el.querySelector('.stepper-name')?.textContent === kind,
   );
   const buttons = stepper?.querySelectorAll('.step');
@@ -160,8 +160,13 @@ describe('App', () => {
 
     // The give side clamps to what the player actually holds, so asking for one of everything
     // yields one of each card they have.
-    for (const kind of ['Brick', 'Lumber', 'Ore', 'Grain', 'Wool']) bump(root, 0, kind);
-    bump(root, 1, 'Brick');
+    for (const kind of ['Brick', 'Lumber', 'Ore', 'Grain', 'Wool']) bump(root, 'give', kind);
+    bump(root, 'want', 'Brick');
+    // Wanted on top, given at the bottom, next to the hand.
+    const sides = [...root.querySelectorAll('.stepper-row')].map((r) =>
+      r.getAttribute('data-side'),
+    );
+    expect(sides).toEqual(['want', 'give']);
     expect(root.querySelector('.draft-head')?.textContent).not.toContain('nothing');
 
     click(button(root, 'Offer'));
@@ -178,7 +183,7 @@ describe('App', () => {
     const card = root.querySelector('.card-pick');
     const kind = card?.querySelector('.card-name')?.textContent;
     click(card);
-    const give = root.querySelectorAll('.stepper-row')[0];
+    const give = root.querySelector('.stepper-row[data-side="give"]');
     const chosen = [...(give?.querySelectorAll('.stepper-on .stepper-name') ?? [])];
     expect(chosen.map((el) => el.textContent)).toEqual([kind]);
 
